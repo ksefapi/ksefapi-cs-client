@@ -1,0 +1,72 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net35;net452;net462;net472;net48;netstandard2.0;netcoreapp3.1;net5.0;net6.0</TargetFrameworks>
+		<RuntimeIdentifiers>win</RuntimeIdentifiers>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+		<PackageId>KSEFAPI.KSEFAPIClient</PackageId>
+		<Version>1.2.3</Version>
+		<AssemblyVersion>1.2.3.0</AssemblyVersion>
+		<FileVersion>1.2.3.0</FileVersion>
+
+		<Title>KSEF API Service Client</Title>
+		<Summary>KSEF API Service Client for .NET Framework (C#)</Summary>
+		<Description>This library contains KSEF API Service Client.</Description>
+
+		<Company>NETCAT</Company>
+		<Product>NIP24</Product>
+		<Authors>NETCAT</Authors>
+		<Copyright>Copyright © 2025 by NETCAT (www.netcat.pl)</Copyright>
+		<PackageLicenseUrl></PackageLicenseUrl>
+		<PackageProjectUrl>https://www.nip24.pl</PackageProjectUrl>
+
+		<RequireLicenseAcceptance>false</RequireLicenseAcceptance>
+		<PackageTags>ksef faktura invoice vat nip regon krs</PackageTags>
+		<SignAssembly>true</SignAssembly>
+		<AssemblyOriginatorKeyFile>ksefLibrary.snk</AssemblyOriginatorKeyFile>
+		<DelaySign>false</DelaySign>
+	</PropertyGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net35' ">
+		<Reference Include="System" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net452' ">
+		<Reference Include="System" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
+		<Reference Include="System" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+		<Reference Include="System" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+		<Reference Include="System" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Model\" />
+	</ItemGroup>
+</Project>

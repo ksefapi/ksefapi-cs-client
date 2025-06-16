@@ -1,0 +1,9 @@
+### Visual Studio ###
+/.vs/
+*.user
+
+### Local
+**/bin/
+**/obj/
+**/packages/
+**/packages.config
