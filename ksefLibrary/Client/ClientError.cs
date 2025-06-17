@@ -39,6 +39,7 @@ namespace KsefApi.Client
         public const int CLI_RSA_ENCRYPT   = 309;
         public const int CLI_AES_ENCRYPT   = 310;
         public const int CLI_AES_DECRYPT   = 311;
+        public const int CLI_JSON          = 312;
 
         private static readonly Dictionary<int, string> Codes = new Dictionary<int, string> {
             { CLI_INPUT,         "Nieprawidłowy parametr wejściowy funkcji" },
@@ -51,7 +52,8 @@ namespace KsefApi.Client
             { CLI_PKEY_FORMAT,   "Nieprawidłowy format klucza publicznego KSeF" },
             { CLI_RSA_ENCRYPT,   "Nie udało się zaszyfrować klucza symetrycznego kluczem publicznym KSeF" },
             { CLI_AES_ENCRYPT,   "Nie udało się zaszyfrować danych kluczem symetrycznym" },
-            { CLI_AES_DECRYPT,   "Nie udało się odszyfrować danych kluczem symetrycznym" }
+            { CLI_AES_DECRYPT,   "Nie udało się odszyfrować danych kluczem symetrycznym" },
+            { CLI_JSON,          "Nie udała się konwersja JSON na obiekt modelu lub odwrotna" }
         };
 
         /// <summary>
@@ -61,7 +63,7 @@ namespace KsefApi.Client
         /// <returns>error message</returns>
         public static string Message(int code)
         {
-            if (code < CLI_INPUT || code > CLI_AES_DECRYPT)
+            if (code < CLI_INPUT || code > CLI_JSON)
             {
                 return null;
             }

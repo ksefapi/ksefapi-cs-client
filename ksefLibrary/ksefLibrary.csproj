@@ -5,28 +5,34 @@
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
 		<PackageId>KSEFAPI.KSEFAPIClient</PackageId>
-		<Version>1.2.3</Version>
-		<AssemblyVersion>1.2.3.0</AssemblyVersion>
-		<FileVersion>1.2.3.0</FileVersion>
+		<Version>1.2.4</Version>
+		<AssemblyVersion>1.2.4.0</AssemblyVersion>
+		<FileVersion>1.2.4.0</FileVersion>
 
 		<Title>KSEF API Service Client</Title>
 		<Summary>KSEF API Service Client for .NET Framework (C#)</Summary>
 		<Description>This library contains KSEF API Service Client.</Description>
 
 		<Company>NETCAT</Company>
-		<Product>NIP24</Product>
+		<Product>KSEF API</Product>
 		<Authors>NETCAT</Authors>
 		<Copyright>Copyright © 2025 by NETCAT (www.netcat.pl)</Copyright>
-		<PackageLicenseUrl></PackageLicenseUrl>
-		<PackageProjectUrl>https://www.nip24.pl</PackageProjectUrl>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<PackageProjectUrl>https://ksefapi.pl</PackageProjectUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 		<RequireLicenseAcceptance>false</RequireLicenseAcceptance>
-		<PackageTags>ksef faktura invoice vat nip regon krs</PackageTags>
+		<PackageTags>ksef api faktura invoice vat nip regon krs integracja</PackageTags>
 		<SignAssembly>true</SignAssembly>
 		<AssemblyOriginatorKeyFile>ksefLibrary.snk</AssemblyOriginatorKeyFile>
 		<DelaySign>false</DelaySign>
 	</PropertyGroup>
-
+	
+	<ItemGroup>
+		<None Include="..\LICENSE" Pack="true" PackagePath="\"/>
+		<None Include="..\README.md" Pack="true" PackagePath="\"/>
+	</ItemGroup>
+	
 	<ItemGroup Condition=" '$(TargetFramework)' == 'net35' ">
 		<Reference Include="System" />
 		<Reference Include="System.Web" />

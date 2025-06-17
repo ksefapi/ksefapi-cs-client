@@ -39,7 +39,7 @@ namespace KsefApi
 	/// </summary>
 	public class KsefApiClient
 	{
-		public const string VERSION = "1.2.3";
+		public const string VERSION = "1.2.4";
 
 		public const string PRODUCTION_URL = "https://ksefapi.pl/api";
 		public const string TEST_URL = "https://ksefapi.pl/api-test";
