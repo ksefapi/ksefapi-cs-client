@@ -1,5 +1,5 @@
 ﻿/**
- * Copyright 2025 NETCAT (www.netcat.pl)
+ * Copyright 2025-2026 NETCAT (www.netcat.pl)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  *
  * @author NETCAT <firma@netcat.pl>
- * @copyright 2025 NETCAT (www.netcat.pl)
+ * @copyright 2025-2026 NETCAT (www.netcat.pl)
  * @license http://www.apache.org/licenses/LICENSE-2.0
  */
 
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 namespace KsefApi.Client
 {
@@ -28,18 +27,18 @@ namespace KsefApi.Client
     /// </summary>
     public class ClientError
     {
-        public const int CLI_INPUT         = 301;
-        public const int CLI_CONNECT       = 302;
-        public const int CLI_AUTH          = 303;
-        public const int CLI_RESPONSE      = 304;
-        public const int CLI_EXCEPTION     = 305;
-        public const int CLI_SEND          = 306;
-        public const int CLI_PKEY_ALG      = 307;
-        public const int CLI_PKEY_FORMAT   = 308;
-        public const int CLI_RSA_ENCRYPT   = 309;
-        public const int CLI_AES_ENCRYPT   = 310;
-        public const int CLI_AES_DECRYPT   = 311;
-        public const int CLI_JSON          = 312;
+        public const int CLI_INPUT         = 5001;
+        public const int CLI_CONNECT       = 5002;
+        public const int CLI_AUTH          = 5003;
+        public const int CLI_RESPONSE      = 5004;
+        public const int CLI_EXCEPTION     = 5005;
+        public const int CLI_SEND          = 5006;
+        public const int CLI_PKEY_ALG      = 5007;
+        public const int CLI_PKEY_FORMAT   = 5008;
+        public const int CLI_RSA_ENCRYPT   = 5009;
+        public const int CLI_AES_ENCRYPT   = 5010;
+        public const int CLI_AES_DECRYPT   = 5011;
+        public const int CLI_JSON          = 5012;
 
         private static readonly Dictionary<int, string> Codes = new Dictionary<int, string> {
             { CLI_INPUT,         "Nieprawidłowy parametr wejściowy funkcji" },

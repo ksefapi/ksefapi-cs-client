@@ -1,5 +1,5 @@
 ﻿/**
- * Copyright 2025 NETCAT (www.netcat.pl)
+ * Copyright 2025-2026 NETCAT (www.netcat.pl)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,14 @@
  * limitations under the License.
  *
  * @author NETCAT <firma@netcat.pl>
- * @copyright 2025 NETCAT (www.netcat.pl)
+ * @copyright 2025-2026 NETCAT (www.netcat.pl)
  * @license http://www.apache.org/licenses/LICENSE-2.0
  */
 
+using System.IO.Compression;
 using System.Text;
 using KsefApi.Model;
+
 namespace KsefApi.Example
 {
     /// <summary>
@@ -27,14 +29,20 @@ namespace KsefApi.Example
     /// </summary>
     class Program
     {
+        private static string? SellerNIP;
+        private static string? SellerName;
 
-        private static string SellerNIP;
-        private static string SellerName;
-
-        private static KsefApiClient KsefApi;
+        private static KsefApiClient? KsefApi;
         private static DateTime Now;
 
-        private static string KsefRefNumber;
+        private static byte[]? Iv;
+        private static byte[]? SKey;
+        private static byte[]? EncKey;
+
+        // increment on each run to avoid duplicates
+        private static int InvoiceNumber = 1;
+
+        private static string? KsefNumber;
 
         static void Main(string[] args)
         {
@@ -50,53 +58,147 @@ namespace KsefApi.Example
                 // KSEF API client object
                 KsefApi = new KsefApiClient(KsefApiClient.TEST_URL, "enter valid API id here", "enter valid API key here");
 
+                GenerateEncryptionData();
+
                 // test some typical use cases
+
+                // basic functions
+                CreateInvoiceXml();
                 ValidateInvoiceXml();
+
                 CreateAndSendInvoice();
-                CreateAndSendInvoiceWithEncryption();
+                CreateAndSendBatch();
+
+                VisualizeInvoiceXml();
+
                 GetInvoiceByKsefNumber();
                 GetInvoicesByTimeRange();
-                VisualizeInvoiceXml();
+
+                // black-box functions
+                UploadInvoice();
+                UploadBatch();
+
+                DownloadInvoices();
             }
             catch (Exception e)
             {
-                Console.WriteLine("ERR: " + e.StackTrace);
+                Console.Error.WriteLine("main: " + e);
             }
         }
 
-        private static  Faktura CreateInvoice()
+        /// <summary>
+        /// Generate init vector and key for symmetric encryption
+        /// </summary>
+        private static void GenerateEncryptionData()
         {
+            Console.WriteLine("GenerateEncryptionData");
+
+            try
+            {
+                // get new init vector for symmetric encryption
+                Iv = KsefApi.GenerateInitVector();
+
+                if (Iv == null)
+                {
+                    Console.Error.WriteLine("ERR: GenerateInitVector failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("GenerateEncryptionData: init vector: " + Convert.ToBase64String(Iv));
+
+                // gen new symmetric key for encryption
+                SKey = KsefApi.GenerateKey();
+
+                if (SKey == null)
+                {
+                    Console.Error.WriteLine("ERR: GenerateKey failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("GenerateEncryptionData: symmetric key: " + Convert.ToBase64String(SKey));
+
+                // encrypt symmetric key with KSeF public key
+                KsefPublicKeyResponse pkr = KsefApi.KsefPublicKey();
+
+                if (pkr == null)
+                {
+                    Console.Error.WriteLine("ERR: KsefPublicKey failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("KSeF public key: " + pkr);
+
+                EncKey = KsefApi.EncryptKey(pkr, SKey);
+
+                if (EncKey == null)
+                {
+                    Console.Error.WriteLine("ERR: EncryptKey failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("GenerateEncryptionData: encrypted symmetric key: " + Convert.ToBase64String(EncKey));
+
+                Console.WriteLine("GenerateEncryptionData: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("GenerateEncryptionData: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Get next invoice number for tests
+        /// </summary>
+        private static string GenNextInvoiceNumber()
+        {
+            return string.Format("KSEFAPI/{0:D5}/{1:D2}/{2:D2}/{3:D4}", InvoiceNumber++, Now.Day, Now.Month, Now.Year);
+        }
+
+        /// <summary>
+        /// Create an invoice object
+        /// </summary>
+        private static Faktura CreateInvoice()
+        {
+            Console.WriteLine("CreateInvoice");
+
             // create new invoice object (adapt the data to your needs)
             Faktura invoice = new Faktura();
 
             invoice.Naglowek = new TNaglowek();
-            invoice.Naglowek.KodFormularza = new TKodFormularza(TKodFormularza.KodFormularzaEnum.FA, TKodFormularza.KodSystemowyEnum.FAV2, TKodFormularza.WersjaSchemyEnum._10E);
-            invoice.Naglowek.WariantFormularza = WariantFormularza.NUMBER_2;
+            invoice.Naglowek.KodFormularza = new TKodFormularza(TKodFormularza.KodFormularzaEnum.FA,
+                TKodFormularza.KodSystemowyEnum.FAV3, TKodFormularza.WersjaSchemyEnum._10E);
+            invoice.Naglowek.WariantFormularza = WariantFormularza.NUMBER_3;
             invoice.Naglowek.DataWytworzeniaFa = Now;
             invoice.Naglowek.SystemInfo = "KSEF API";
 
+            // seller data
             invoice.Podmiot1 = new Podmiot1();
             invoice.Podmiot1.DaneIdentyfikacyjne = new TPodmiot1(SellerNIP, SellerName);
             invoice.Podmiot1.Adres = new TAdres(TKodKraju.PL, "ul. Kwiatowa 1 m. 2", "00-001 Warszawa");
 
+            // buyer data
             invoice.Podmiot2 = new Podmiot2();
             invoice.Podmiot2.DaneIdentyfikacyjne = new TPodmiot2("F.H.U. Jan Kowalski", "1111111111");
             invoice.Podmiot2.Adres = new TAdres(TKodKraju.PL, "ul. Polna 1", "00-001 Warszawa");
+            invoice.Podmiot2.JST = Podmiot2.JSTEnum.NUMBER_2;
+            invoice.Podmiot2.GV = Podmiot2.GVEnum.NUMBER_2;
 
             invoice.Fa = new Fa();
             invoice.Fa.KodWaluty = TKodWaluty.PLN;
-            invoice.Fa.P1 = Now;            // date of issue
-            invoice.Fa.P2 = "001/01/2025";  // invoice number
-            invoice.Fa.P6 = Now;            // date of sale
-            invoice.Fa.P131 = 1666.66;      // total net amount
-            invoice.Fa.P141 = 383.33;       // total VAT amount
+            invoice.Fa.P1 = Now.Date;               // date of issue
+            invoice.Fa.P1M = "Warszawa";
+            invoice.Fa.P2 = GenNextInvoiceNumber(); // invoice number
+            invoice.Fa.P6 = Now.Date;               // date of sale
+            invoice.Fa.P131 = 1666.66;              // total net amount
+            invoice.Fa.P141 = 383.33;               // total VAT amount
             invoice.Fa.P133 = 0.95;
             invoice.Fa.P143 = 0.05;
-            invoice.Fa.P15 = 2051.0;        // total gross amount
-            invoice.Fa.Adnotacje = new Adnotacje(2, 2, 2, 2, new Zwolnienie(0, null, null, null, 1), new NoweSrodkiTransportu(0, 0, null, 1), 2, new PMarzy(0, 0, 0, 0, 0, 1));
+            invoice.Fa.P15 = 2051.0;                // total gross amount
+            invoice.Fa.Adnotacje = new Adnotacje(2, 2, 2, 2, new Zwolnienie(0, null, null, null, 1),
+                new NoweSrodkiTransportu(0, 0, null, 1), 2, new PMarzy(0, 0, 0, 0, 0, 1));
             invoice.Fa.RodzajFaktury = TRodzajFaktury.VAT;
             invoice.Fa.FP = 1;
-            invoice.Fa.Platnosc = new Platnosc(1, Now, 0, null, null, TFormaPlatnosci.NUMBER_6);
+            invoice.Fa.Platnosc = new Platnosc(1, Now.Date, 0, null, null, TFormaPlatnosci.NUMBER_6);
 
             FaWiersz w1 = new FaWiersz();
             w1.NrWierszaFa = 1;
@@ -138,15 +240,20 @@ namespace KsefApi.Example
             return invoice;
         }
 
+        /// <summary>
+        /// Get sample invoice XML
+        /// </summary>
         private static string GetInvoiceXml()
         {
+            Console.WriteLine("GetInvoiceXml");
+
             return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                 "<Faktura xmlns:etd=\"http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
-                "xmlns=\"http://crd.gov.pl/wzor/2023/06/29/12648/\">\n" +
+                "xmlns=\"http://crd.gov.pl/wzor/2025/06/25/13775/\">\n" +
                 "\t<Naglowek>\n" +
-                "\t\t<KodFormularza kodSystemowy=\"FA (2)\" wersjaSchemy=\"1-0E\">FA</KodFormularza>\n" +
-                "\t\t<WariantFormularza>2</WariantFormularza>\n" +
-                "\t\t<DataWytworzeniaFa>" + Now.ToUniversalTime().ToString("yyyy-MM-ddThh:mm:ss.fffZ") + "</DataWytworzeniaFa>\n" +
+                "\t\t<KodFormularza kodSystemowy=\"FA (3)\" wersjaSchemy=\"1-0E\">FA</KodFormularza>\n" +
+                "\t\t<WariantFormularza>3</WariantFormularza>\n" +
+                "\t\t<DataWytworzeniaFa>" + ToIsoString(Now) + "</DataWytworzeniaFa>\n" +
                 "\t\t<SystemInfo>KSEF API</SystemInfo>\n" +
                 "\t</Naglowek>\n" +
                 "\t<Podmiot1>\n" +
@@ -179,13 +286,15 @@ namespace KsefApi.Example
                 "\t\t\t<Telefon>555777999</Telefon>\n" +
                 "\t\t</DaneKontaktowe>\n" +
                 "\t\t<NrKlienta>fdfd778343</NrKlienta>\n" +
+                "\t\t<JST>2</JST>\n" +
+                "\t\t<GV>2</GV>\n" +
                 "\t</Podmiot2>\n" +
                 "\t<Fa>\n" +
                 "\t\t<KodWaluty>PLN</KodWaluty>\n" +
-                "\t\t<P_1>2022-02-15</P_1>\n" +
+                "\t\t<P_1>" + ToDateString(Now) + "</P_1>\n" +
                 "\t\t<P_1M>Warszawa</P_1M>\n" +
-                "\t\t<P_2>FV2022/02/150</P_2>\n" +
-                "\t\t<P_6>" + Now.ToString("yyyy-MM-dd") + "</P_6>\n" +
+                "\t\t<P_2>" + GenNextInvoiceNumber() + "</P_2>\n" +
+                "\t\t<P_6>" + ToDateString(Now) + "</P_6>\n" +
                 "\t\t<P_13_1>1666.66</P_13_1>\n" +
                 "\t\t<P_14_1>383.33</P_14_1>\n" +
                 "\t\t<P_13_3>0.95</P_13_3>\n" +
@@ -245,12 +354,12 @@ namespace KsefApi.Example
                 "\t\t</FaWiersz>\n" +
                 "\t\t<Platnosc>\n" +
                 "\t\t\t<Zaplacono>1</Zaplacono>\n" +
-                "\t\t\t<DataZaplaty>" + Now.ToString("yyyy-MM-dd") + "</DataZaplaty>\n" +
+                "\t\t\t<DataZaplaty>" + ToDateString(Now) + "</DataZaplaty>\n" +
                 "\t\t\t<FormaPlatnosci>6</FormaPlatnosci>\n" +
                 "\t\t</Platnosc>\n" +
                 "\t\t<WarunkiTransakcji>\n" +
                 "\t\t\t<Zamowienia>\n" +
-                "\t\t\t\t<DataZamowienia>" + Now.ToString("yyyy-MM-dd") + "</DataZamowienia>\n" +
+                "\t\t\t\t<DataZamowienia>" + ToDateString(Now) + "</DataZamowienia>\n" +
                 "\t\t\t\t<NrZamowienia>4354343</NrZamowienia>\n" +
                 "\t\t\t</Zamowienia>\n" +
                 "\t\t</WarunkiTransakcji>\n" +
@@ -268,6 +377,65 @@ namespace KsefApi.Example
                 "</Faktura>\n";
         }
 
+        /// <summary>
+        /// Create new batch file
+        /// </summary>
+        private static string CreateBatch()
+        {
+            string path = CreateTempFile("batch-", ".zip");
+
+            using (FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (ZipArchive zip = new ZipArchive(fs, ZipArchiveMode.Create))
+            {
+                for (int i = 1; i <= 100; i++)
+                {
+                    string xml = GetInvoiceXml();
+                    ZipArchiveEntry entry = zip.CreateEntry(string.Format("invoice-{0:D3}.xml", i));
+
+                    using (StreamWriter writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                    {
+                        writer.Write(xml);
+                    }
+                }
+            }
+
+            return path;
+        }
+
+        /// <summary>
+        /// Create invoice XML
+        /// </summary>
+        private static void CreateInvoiceXml()
+        {
+            Console.WriteLine("CreateInvoiceXml");
+
+            try
+            {
+                // create new invoice object
+                Faktura invoice = CreateInvoice();
+
+                // get invoice as xml
+                string xml = KsefApi.KsefInvoiceGenerate(invoice);
+
+                if (xml == null)
+                {
+                    Console.Error.WriteLine("ERR: KsefInvoiceGenerate failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("Invoice XML: " + xml);
+
+                Console.WriteLine("CreateInvoiceXml: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("CreateInvoiceXml: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Validate invoice XML
+        /// </summary>
         private static void ValidateInvoiceXml()
         {
             Console.WriteLine("ValidateInvoiceXml");
@@ -281,7 +449,7 @@ namespace KsefApi.Example
 
                 if (res == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceValidate failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceValidate failed: " + KsefApi.LastError);
                     return;
                 }
 
@@ -291,10 +459,13 @@ namespace KsefApi.Example
             }
             catch (Exception e)
             {
-                Console.WriteLine("ValidateInvoiceXml: " + e);
+                Console.Error.WriteLine("ValidateInvoiceXml: " + e);
             }
         }
 
+        /// <summary>
+        /// Get sample invoice, encrypt it and send
+        /// </summary>
         private static void CreateAndSendInvoice()
         {
             Console.WriteLine("CreateAndSendInvoice");
@@ -309,148 +480,25 @@ namespace KsefApi.Example
 
                 if (xml == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceGenerate failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceGenerate failed: " + KsefApi.LastError);
                     return;
                 }
 
                 Console.WriteLine("Invoice XML: " + xml);
 
-                // open new session
-                KsefSessionOpenResponse sor = KsefApi.KsefSessionOpen(KsefInvoiceVersion.V2);
+                // open new online session
+                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
+                KsefSessionOpenOnlineRequest soo = new KsefSessionOpenOnlineRequest(KsefInvoiceVersion.V3, ei);
 
-                if (sor == null)
+                KsefSessionOpenOnlineResponse soor = KsefApi.KsefSessionOpenOnline(soo);
+
+                if (soor == null)
                 {
-                    Console.WriteLine("ERR: KsefSessionOpen failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefSessionOpenOnline failed: " + KsefApi.LastError);
                     return;
                 }
 
-                Console.WriteLine("KSeF session id: " + sor.Id);
-
-                // send an invoice
-                byte[] data = Encoding.UTF8.GetBytes(xml);
-
-                KsefInvoiceSendResponse isr = KsefApi.KsefInvoiceSend(sor.Id, 0, null, data);
-
-                if (isr == null)
-                {
-                    Console.WriteLine("ERR: KsefInvoiceSend failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF invoice id: " + isr.Id);
-
-                // check an invoice status (and fetch KSeF reference number and date)
-                KsefInvoiceStatusResponse str = KsefApi.KsefInvoiceStatus(isr.Id);
-
-                if (str == null)
-                {
-                    Console.WriteLine("ERR: KsefInvoiceStatus failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF invoice number: " + str.KsefReferenceNumber);
-                Console.WriteLine("KSeF invoice date: " + str.AcquisitionTimestamp);
-
-                // save for other tests
-                KsefRefNumber = str.KsefReferenceNumber;
-
-                // close session
-                bool sc = KsefApi.KsefSessionClose(sor.Id);
-
-                if (!sc)
-                {
-                    Console.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                // get UPO
-                string upo = KsefApi.KsefSessionUpo(sor.Id);
-
-                if (upo == null)
-                {
-                    Console.WriteLine("ERR: KsefSessionUpo failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("UPO: " + upo);
-
-                File.WriteAllText("UPO-" + str.KsefReferenceNumber + ".xml", upo);
-
-                Console.WriteLine("CreateAndSendInvoice: done");
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("CreateAndSendInvoice: " + e.StackTrace);
-            }
-        }
-
-        private static void CreateAndSendInvoiceWithEncryption()
-        {
-            Console.WriteLine("CreateAndSendInvoiceWithEncryption");
-
-            try
-            {
-                // create new invoice object
-                Faktura invoice = CreateInvoice();
-
-                // get invoice as xml
-                string xml = KsefApi.KsefInvoiceGenerate(invoice);
-
-                if (xml == null)
-                {
-                    Console.WriteLine("ERR: KsefInvoiceGenerate failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("Invoice XML: " + xml);
-
-                // get new init vector for session with encryption
-                byte[] iv = KsefApi.GenerateInitVector();
-
-                if (iv == null)
-                {
-                    Console.WriteLine("ERR: GenerateInitVector failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                // gen new symmetric key for session with encryption
-                byte[] skey = KsefApi.GenerateKey();
-
-                if (skey == null)
-                {
-                    Console.WriteLine("ERR: GenerateKey failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                // encrypt symmetric key with KSeF public key
-                KsefPublicKeyResponse pkr = KsefApi.KsefPublicKey();
-
-                if (pkr == null)
-                {
-                    Console.WriteLine("ERR: KsefPublicKey failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF public key: " + pkr);
-
-                byte[] encKey = KsefApi.EncryptKey(pkr, skey);
-
-                if (encKey == null)
-                {
-                    Console.WriteLine("ERR: EncryptKey failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                // open new session
-                KsefSessionOpenResponse sor = KsefApi.KsefSessionOpen(KsefInvoiceVersion.V2, iv, encKey);
-
-                if (sor == null)
-                {
-                    Console.WriteLine("ERR: KsefSessionOpen failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF session id: " + sor.Id);
+                Console.WriteLine("KSeF session id: " + soor.Id);
 
                 // encrypt an invoice
                 byte[] data = Encoding.UTF8.GetBytes(xml);
@@ -460,205 +508,349 @@ namespace KsefApi.Example
 
                 if (hash == null)
                 {
-                    Console.WriteLine("ERR: GetHash failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: GetHash failed: " + KsefApi.LastError);
                     return;
                 }
 
-                byte[] encData = KsefApi.EncryptData(iv, skey, data);
+                byte[] encData = KsefApi.EncryptData(Iv, SKey, data);
 
                 if (encData == null)
                 {
-                    Console.WriteLine("ERR: EncryptData failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: EncryptData failed: " + KsefApi.LastError);
                     return;
                 }
 
                 // send an encrypted invoice
-                KsefInvoiceSendResponse isr = KsefApi.KsefInvoiceSend(sor.Id, size, hash, encData);
+                KsefInvoiceEncrypted ie = new KsefInvoiceEncrypted(size, hash, encData);
+                KsefInvoiceSendRequest req = new KsefInvoiceSendRequest(soor.Id, ie);
+
+                KsefInvoiceSendResponse isr = KsefApi.KsefInvoiceSend(req);
 
                 if (isr == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceSend failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceSend failed: " + KsefApi.LastError);
                     return;
                 }
 
                 Console.WriteLine("KSeF invoice id: " + isr.Id);
 
-                // check an invoice status (and fetch KSeF reference number and date)
+                // check an invoice status (and fetch KSeF number and acquisition date)
                 KsefInvoiceStatusResponse str = KsefApi.KsefInvoiceStatus(isr.Id);
 
                 if (str == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceStatus failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceStatus failed: " + KsefApi.LastError);
                     return;
                 }
 
-                Console.WriteLine("KSeF invoice number: " + str.KsefReferenceNumber);
-                Console.WriteLine("KSeF invoice date: " + str.AcquisitionTimestamp);
+                PrintInvoiceInfo(str.InvoiceInfo);
 
                 // save for other tests
-                KsefRefNumber = str.KsefReferenceNumber;
+                KsefNumber = str.InvoiceInfo.KsefNumber;
 
                 // close session
-                bool sc = KsefApi.KsefSessionClose(sor.Id);
+                bool sc = KsefApi.KsefSessionClose(soor.Id);
 
                 if (!sc)
                 {
-                    Console.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
                     return;
                 }
 
                 // get UPO
-                string upo = KsefApi.KsefSessionUpo(sor.Id);
+                string upo = KsefApi.KsefSessionUpo(soor.Id);
 
                 if (upo == null)
                 {
-                    Console.WriteLine("ERR: KsefSessionUpo failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefSessionUpo failed: " + KsefApi.LastError);
                     return;
                 }
 
                 Console.WriteLine("UPO: " + upo);
 
-                File.WriteAllText("UPO-" + str.KsefReferenceNumber + ".xml", upo);
+                string path = CreateTempFile("upo-", ".xml");
+                File.WriteAllText(path, upo, Encoding.UTF8);
 
-                Console.WriteLine("CreateAndSendInvoiceWithEncryption: done");
+                Console.WriteLine("CreateAndSendInvoice: upo saved to: " + path);
+
+                Console.WriteLine("CreateAndSendInvoice: done");
             }
             catch (Exception e)
             {
-                Console.WriteLine("CreateAndSendInvoiceWithEncryption: " + e.StackTrace);
+                Console.Error.WriteLine("CreateAndSendInvoice: " + e);
             }
         }
 
+        /// <summary>
+        /// Generate sample batch, encrypt it and send
+        /// </summary>
+        private static void CreateAndSendBatch()
+        {
+            Console.WriteLine("CreateAndSendBatch");
+
+            try
+            {
+                // create new batch
+                string batch = CreateBatch();
+
+                Console.WriteLine("Batch file: " + batch);
+
+                // encrypt batch (large batch files must be divided into 50 MB parts, with each part encrypted separately)
+                byte[] data = File.ReadAllBytes(batch);
+                byte[] dataHash = KsefApi.GetHash(data);
+
+                byte[] encData = KsefApi.EncryptData(Iv, SKey, data);
+                byte[] encDataHash = KsefApi.GetHash(encData);
+
+                // open new batch session
+                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
+                BatchPartInfo bpi = new BatchPartInfo(1, encData.Length, encDataHash);
+                BatchInfo bi = new BatchInfo(data.Length, dataHash, new List<BatchPartInfo> { bpi });
+                KsefSessionOpenBatchRequest sob = new KsefSessionOpenBatchRequest(KsefInvoiceVersion.V3, ei, true, bi);
+
+                KsefSessionOpenBatchResponse sobr = KsefApi.KsefSessionOpenBatch(sob);
+
+                if (sobr == null)
+                {
+                    Console.Error.WriteLine("ERR: KsefSessionOpenBatch failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("KSeF session id: " + sobr.Id);
+
+                // upload all batch parts (using received info)
+                using (HttpClient http = new HttpClient())
+                {
+                    foreach (PartUploadInfo pui in sobr.PartUploads)
+                    {
+                        Console.WriteLine("Uploading part: " + pui.Ordinal);
+
+                        Console.WriteLine("Upload method: " + pui.Method);
+                        Console.WriteLine("Upload URL: " + pui.Url);
+                        Console.WriteLine("Upload headers: " + pui.Headers);
+
+                        using (HttpRequestMessage request = new HttpRequestMessage(new HttpMethod(pui.Method), pui.Url))
+                        {
+                            foreach (PartUploadHeader puh in pui.Headers)
+                            {
+                                request.Headers.TryAddWithoutValidation(puh.Name, puh.Value);
+                            }
+
+                            request.Content = new ByteArrayContent(encData);
+
+                            HttpResponseMessage res = http.Send(request);
+
+                            if ((int)res.StatusCode != 201)
+                            {
+                                Console.Error.WriteLine("ERR: part upload failed: " + (int)res.StatusCode);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                Console.WriteLine("Upload completed");
+
+                // close session
+                bool sc = KsefApi.KsefSessionClose(sobr.Id);
+
+                if (!sc)
+                {
+                    Console.Error.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                // wait for the batch to be processed (we're using a simple loop here, but in real applications
+                // you should use a more sophisticated method)
+                KsefSessionStatusResponse? ssr = null;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    ssr = KsefApi.KsefSessionStatus(sobr.Id);
+
+                    if (ssr != null)
+                    {
+                        Console.WriteLine("Batch processed");
+                        break;
+                    }
+
+                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
+                    {
+                        Console.WriteLine("Still processing...");
+                        Thread.Sleep(30000);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("ERR: KsefSessionStatus failed: " + KsefApi.LastError);
+                        break;
+                    }
+                }
+
+                if (ssr == null)
+                {
+                    Console.Error.WriteLine("Timed out, batch not processed (it may need more time)");
+                    return;
+                }
+
+                Console.WriteLine("Total invoices count: " + ssr.SessionInfo.InvoiceCount);
+                Console.WriteLine("Successful invoices count: " + ssr.SessionInfo.SuccessfulInvoiceCount);
+                Console.WriteLine("Failed invoices count: " + ssr.SessionInfo.FailedInvoiceCount);
+
+                // get batch invoices statuses (and fetch KSeF numbers and acquisition dates)
+                KsefSessionInvoicesResponse sir = KsefApi.ksefSessionInvoices(sobr.Id);
+
+                foreach (InvoiceInfo ii in sir.Invoices)
+                {
+                    PrintInvoiceInfo(ii);
+                }
+
+                // get UPO
+                string upo = KsefApi.KsefSessionUpo(sobr.Id);
+
+                if (upo == null)
+                {
+                    Console.Error.WriteLine("ERR: KsefSessionUpo failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("UPO: " + upo);
+
+                string path = CreateTempFile("upo-", ".xml");
+                File.WriteAllText(path, upo, Encoding.UTF8);
+
+                Console.WriteLine("CreateAndSendBatch: upo saved to: " + path);
+
+                Console.WriteLine("CreateAndSendBatch: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("CreateAndSendBatch: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Get invoice by its KSeF number
+        /// </summary>
         private static void GetInvoiceByKsefNumber()
         {
             Console.WriteLine("GetInvoiceByKsefNumber");
 
             try
             {
-                // open new session
-                KsefSessionOpenResponse sor = KsefApi.KsefSessionOpen(KsefInvoiceVersion.V2);
-
-                if (sor == null)
-                {
-                    Console.WriteLine("ERR: KsefSessionOpen failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF session id: " + sor.Id);
-
                 // get by number (we're using number from previous test)
-                byte[] xml = KsefApi.KsefInvoiceGet(sor.Id, KsefRefNumber);
+                byte[] xml = KsefApi.KsefInvoiceGet(KsefNumber);
 
                 if (xml == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceGet failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceGet failed: " + KsefApi.LastError);
                     return;
                 }
 
                 Console.WriteLine("Invoice XML: " + Encoding.UTF8.GetString(xml));
 
-                File.WriteAllBytes("invoice-" + KsefRefNumber + ".xml", xml);
+                string path = CreateTempFile("invoice-", ".xml");
+                File.WriteAllBytes(path, xml);
 
-                // close session
-                bool sc = KsefApi.KsefSessionClose(sor.Id);
-
-                if (!sc)
-                {
-                    Console.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
-                    return;
-                }
+                Console.WriteLine("GetInvoiceByKsefNumber: invoice saved to: " + path);
 
                 Console.WriteLine("GetInvoiceByKsefNumber: done");
             }
             catch (Exception e)
             {
-                Console.WriteLine("GetInvoiceByKsefNumber: " + e);
+                Console.Error.WriteLine("GetInvoiceByKsefNumber: " + e);
             }
         }
 
+        /// <summary>
+        /// Get all invoices from specified time range and type
+        /// </summary>
         private static void GetInvoicesByTimeRange()
         {
             Console.WriteLine("GetInvoicesByTimeRange");
 
             try
             {
-                // open new session
-                KsefSessionOpenResponse sor = KsefApi.KsefSessionOpen(KsefInvoiceVersion.V2);
+                // start query (get all invoices from last 3 days)
+                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
 
-                if (sor == null)
-                {
-                    Console.WriteLine("ERR: KsefSessionOpen failed: " + KsefApi.LastError);
-                    return;
-                }
-
-                Console.WriteLine("KSeF session id: " + sor.Id);
-
-                // start query (get all invoices from last 3 days, Subject2 - means cost invoices)
                 DateTime from = Now.AddDays(-3);
                 DateTime to = Now;
 
-                string queryId = KsefApi.KsefInvoiceQueryStart(sor.Id, KsefInvoiceQueryStartRequest.SubjectTypeEnum.Subject2,
-                    from, to);
+                KsefInvoiceQueryStartRange qr = new KsefInvoiceQueryStartRange(from, to);
+                KsefInvoiceQueryStartRequest iqs = new KsefInvoiceQueryStartRequest(ei, KsefInvoiceQueryStartRequest.SubjectTypeEnum.Subject1, qr);
+
+                string queryId = KsefApi.KsefInvoiceQueryStart(iqs);
 
                 if (queryId == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceQueryStart failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceQueryStart failed: " + KsefApi.LastError);
                     return;
                 }
 
                 Console.WriteLine("Query id: " + queryId);
 
-                // wait for result (we're using a simple loop here, in real life you should use a more sophisticated method)
-                string[] partNumbers = null;
+                // wait for the result (we're using a simple loop here, but in real applications
+                // you should use a more sophisticated method)
+                KsefInvoiceQueryStatusResponse? iqsr = null;
 
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 20; i++)
                 {
-                    if ((partNumbers = KsefApi.KsefInvoiceQueryStatus(sor.Id, queryId)) != null)
+                    iqsr = KsefApi.KsefInvoiceQueryStatus(queryId);
+
+                    if (iqsr != null)
                     {
                         Console.WriteLine("Query result is ready");
                         break;
                     }
 
-                    Console.WriteLine("WARNING: KsefInvoiceQueryStatus returned: " + KsefApi.LastError);
-                    Thread.Sleep(5000);
+                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
+                    {
+                        Console.WriteLine("Still processing...");
+                        Thread.Sleep(30000);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("ERR: KsefInvoiceQueryStart failed: " + KsefApi.LastError);
+                        break;
+                    }
                 }
 
-                if (partNumbers == null)
+                if (iqsr == null)
                 {
-                    Console.WriteLine("Timed out, no query result");
+                    Console.Error.WriteLine("Timed out, no query result (it may need more time)");
                     return;
                 }
 
+                Console.WriteLine("Number of invoices: " + iqsr.NumberOfInvoices);
+
                 // get results
-                foreach (string partNumber in partNumbers)
+                foreach (string partNumber in iqsr.PartNumbers)
                 {
-                    byte[] data = KsefApi.KsefInvoiceQueryResult(sor.Id, queryId, partNumber);
+                    byte[] data = KsefApi.KsefInvoiceQueryResult(queryId, partNumber);
 
                     if (data == null)
                     {
-                        Console.WriteLine("ERR: KsefInvoiceQueryResult failed: " + KsefApi.LastError);
+                        Console.Error.WriteLine("ERR: KsefInvoiceQueryResult failed: " + KsefApi.LastError);
                         return;
                     }
 
-                    File.WriteAllBytes("invoices-" + partNumber + ".zip", data);
-                }
+                    string path = CreateTempFile("invoices-", ".zip.enc");
+                    File.WriteAllBytes(path, data);
 
-                // close session
-                bool sc = KsefApi.KsefSessionClose(sor.Id);
-
-                if (!sc)
-                {
-                    Console.WriteLine("ERR: KsefSessionClose failed: " + KsefApi.LastError);
-                    return;
+                    Console.WriteLine("GetInvoicesByTimeRange: encrypted part saved to: " + path);
                 }
 
                 Console.WriteLine("GetInvoicesByTimeRange: done");
             }
             catch (Exception e)
             {
-                Console.WriteLine("GetInvoicesByTimeRange: " + e);
+                Console.Error.WriteLine("GetInvoicesByTimeRange: " + e);
             }
         }
 
+        /// <summary>
+        /// Generate an invoice visualization
+        /// </summary>
         private static void VisualizeInvoiceXml()
         {
             Console.WriteLine("VisualizeInvoiceXml");
@@ -666,39 +858,291 @@ namespace KsefApi.Example
             try
             {
                 string xml = GetInvoiceXml();
-
                 byte[] data = Encoding.UTF8.GetBytes(xml);
 
                 // visualize invoice xml as html (official layout from MF)
-                byte[] html = KsefApi.KsefInvoiceVisualize(KsefRefNumber, data, true, true,
-                    KsefInvoiceVisualizeRequest.OutputFormatEnum.Html, KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+                KsefInvoiceVisualizeRequest iv = new KsefInvoiceVisualizeRequest(null, string.IsNullOrEmpty(KsefNumber), KsefNumber,
+                    data, KsefInvoiceVisualizeRequest.OutputFormatEnum.Html,KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+
+                byte[] html = KsefApi.KsefInvoiceVisualize(iv);
 
                 if (html == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceVisualize failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceVisualize(html) failed: " + KsefApi.LastError);
                     return;
                 }
 
-                File.WriteAllBytes("invoice.html", html);
+                string path = CreateTempFile("invoice-", ".html");
+                File.WriteAllBytes(path, html);
+
+                Console.WriteLine("VisualizeInvoiceXml: html saved to: " + path);
 
                 // visualize invoice xml as pdf (still needs improvements)
-                byte[] pdf = KsefApi.KsefInvoiceVisualize(KsefRefNumber, data, true, true,
-                    KsefInvoiceVisualizeRequest.OutputFormatEnum.Pdf, KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+                iv = new KsefInvoiceVisualizeRequest(null, string.IsNullOrEmpty(KsefNumber), KsefNumber,
+                    data, KsefInvoiceVisualizeRequest.OutputFormatEnum.Pdf, KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+
+                byte[] pdf = KsefApi.KsefInvoiceVisualize(iv);
 
                 if (pdf == null)
                 {
-                    Console.WriteLine("ERR: KsefInvoiceVisualize failed: " + KsefApi.LastError);
+                    Console.Error.WriteLine("ERR: KsefInvoiceVisualize(pdf) failed: " + KsefApi.LastError);
                     return;
                 }
 
-                File.WriteAllBytes("invoice.pdf", pdf);
+                path = CreateTempFile("invoice-", ".pdf");
+                File.WriteAllBytes(path, pdf);
+
+                Console.WriteLine("VisualizeInvoiceXml: pdf saved to: " + path);
 
                 Console.WriteLine("VisualizeInvoiceXml: done");
             }
             catch (Exception e)
             {
-                Console.WriteLine("VisualizeInvoiceXml: " + e);
+                Console.Error.WriteLine("VisualizeInvoiceXml: " + e);
             }
+        }
+
+        /// <summary>
+        /// Upload a plain unencrypted invoice to KSeF
+        /// </summary>
+        private static void UploadInvoice()
+        {
+            Console.WriteLine("UploadInvoice");
+
+            try
+            {
+                // sample invoice
+                string xml = GetInvoiceXml();
+
+                // this ID should be unique and can be used to link the invoice to any event in the user’s system
+                // (e.g., an order number)
+                string uploadId = Guid.NewGuid().ToString();
+
+                BoxUploadInvoiceRequest req = new BoxUploadInvoiceRequest(uploadId, false, false, Encoding.UTF8.GetBytes(xml));
+
+                if (!KsefApi.BoxUploadInvoice(req))
+                {
+                    Console.Error.WriteLine("ERR: BoxUploadInvoice failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                // wait for the result (we're using a simple loop here, but in real applications
+                // you should use a more sophisticated method)
+                BoxUploadInvoiceStatusResponse? res = null;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    res = KsefApi.BoxUploadInvoiceStatus(uploadId);
+
+                    if (res != null)
+                    {
+                        Console.WriteLine("Invoice result is ready");
+                        break;
+                    }
+
+                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
+                    {
+                        Console.WriteLine("Still processing...");
+                        Thread.Sleep(30000);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("ERR: BoxUploadInvoiceStatus failed: " + KsefApi.LastError);
+                        break;
+                    }
+                }
+
+                if (res == null)
+                {
+                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    return;
+                }
+
+                PrintInvoiceInfo(res.InvoiceInfo);
+
+                Console.WriteLine("UploadInvoice: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("UploadInvoice: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Upload a ZIP file (batch) with plain unencrypted invoices to KSeF
+        /// </summary>
+        private static void UploadBatch()
+        {
+            Console.WriteLine("UploadBatch");
+
+            try
+            {
+                // sample batch
+                string batch = CreateBatch();
+
+                // this ID should be unique and can be used to link the invoice to any event in the user’s system
+                // (e.g., an order number)
+                string uploadId = Guid.NewGuid().ToString();
+
+                BoxUploadBatchRequest req = new BoxUploadBatchRequest(uploadId, true, false, KsefInvoiceVersion.V3);
+
+                if (!KsefApi.BoxUploadBatch(req, batch))
+                {
+                    Console.Error.WriteLine("ERR: BoxUploadBatch failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                // wait for the result (we're using a simple loop here, but in real applications
+                // you should use a more sophisticated method)
+                BoxUploadBatchStatusResponse? res = null;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    res = KsefApi.BoxUploadBatchStatus(uploadId);
+
+                    if (res != null)
+                    {
+                        Console.WriteLine("Batch result is ready");
+                        break;
+                    }
+
+                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
+                    {
+                        Console.WriteLine("Still processing...");
+                        Thread.Sleep(30000);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("ERR: BoxUploadBatchStatus failed: " + KsefApi.LastError);
+                        break;
+                    }
+                }
+
+                if (res == null)
+                {
+                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    return;
+                }
+
+                foreach (InvoiceInfo ii in res.InvoiceInfo)
+                {
+                    PrintInvoiceInfo(ii);
+                }
+
+                Console.WriteLine("UploadBatch: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("UploadBatch: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Download all invoices for specified type and time range from KSeF
+        /// </summary>
+        private static void DownloadInvoices()
+        {
+            Console.WriteLine("DownloadInvoices");
+
+            try
+            {
+                // this ID should be unique and can be used to link the invoice to any event in the user’s system
+                string downloadId = Guid.NewGuid().ToString();
+
+                DateTime from = Now.AddDays(-3);
+                DateTime to = Now;
+
+                KsefInvoiceQueryStartRange range = new KsefInvoiceQueryStartRange(from, to);
+
+                BoxDownloadInvoicesRequest req = new BoxDownloadInvoicesRequest(downloadId, false,
+                    BoxDownloadInvoicesRequest.SubjectTypeEnum.Subject1, range);
+
+                if (!KsefApi.BoxDownloadInvoices(req))
+                {
+                    Console.Error.WriteLine("ERR: BoxDownloadInvoices failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                // wait for the result (we're using a simple loop here, but in real applications
+                // you should use a more sophisticated method)
+                byte[]? res = null;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    res = KsefApi.BoxDownloadInvoicesResult(downloadId);
+
+                    if (res != null)
+                    {
+                        Console.WriteLine("Result is ready");
+                        break;
+                    }
+
+                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
+                    {
+                        Console.WriteLine("Still processing...");
+                        Thread.Sleep(30000);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("ERR: BoxDownloadInvoicesResult failed: " + KsefApi.LastError);
+                        break;
+                    }
+                }
+
+                if (res == null)
+                {
+                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    return;
+                }
+
+                // res buffer contains the bytes of a plain, unencrypted ZIP archive that includes the invoices
+                // and a metadata file
+                string path = CreateTempFile("invoices-", ".zip");
+                File.WriteAllBytes(path, res);
+
+                Console.WriteLine("DownloadInvoices: invoices saved to: " + path);
+
+                Console.WriteLine("DownloadInvoices: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("DownloadInvoices: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Print out invoice info
+        /// </summary>
+        private static void PrintInvoiceInfo(InvoiceInfo info)
+        {
+            Console.WriteLine("Invoice status code: " + info.Status.Code);
+            Console.WriteLine("Invoice status description: " + info.Status.Description);
+            Console.WriteLine("Invoice status details: " + info.Status.Details);
+
+            // code = 200 - invoice successfully processed and accepted
+            if (info.Status.Code == 200)
+            {
+                Console.WriteLine("Invoice number: " + info.InvoiceNumber);
+                Console.WriteLine("Invoice KSeF number: " + info.KsefNumber);
+                Console.WriteLine("Invoice acquisition date: " + info.AcquisitionDate);
+            }
+        }
+
+        private static string ToIsoString(DateTime dt)
+        {
+            DateTimeOffset dto = new DateTimeOffset(dt);
+            return dto.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+        }
+
+        private static string ToDateString(DateTime dt)
+        {
+            return dt.ToString("yyyy-MM-dd");
+        }
+
+        private static string CreateTempFile(string prefix, string extension)
+        {
+            string name = prefix + Guid.NewGuid().ToString("N") + extension;
+            return Path.Combine(Path.GetTempPath(), name);
         }
     }
 }

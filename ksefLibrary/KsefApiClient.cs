@@ -1,5 +1,5 @@
 ﻿/**
- * Copyright 2025 NETCAT (www.netcat.pl)
+ * Copyright 2025-2026 NETCAT (www.netcat.pl)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  * @author NETCAT <firma@netcat.pl>
- * @copyright 2025 NETCAT (www.netcat.pl)
+ * @copyright 2025-2026 NETCAT (www.netcat.pl)
  * @license http://www.apache.org/licenses/LICENSE-2.0
  */
 
@@ -29,8 +29,6 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Web;
-using System.Xml;
-using System.Xml.XPath;
 
 namespace KsefApi
 {
@@ -39,15 +37,18 @@ namespace KsefApi
 	/// </summary>
 	public class KsefApiClient
 	{
-		public const string VERSION = "1.2.4";
+		public const string VERSION = "2.0.1";
 
 		public const string PRODUCTION_URL = "https://ksefapi.pl/api";
 		public const string TEST_URL = "https://ksefapi.pl/api-test";
-        public const string NIP24_URL = "https://www.nip24.pl/api/ksef";
 
-        public const string ENC_ALG = "aes-256-cbc";
-        public const int ENC_ALG_BLOCK_SIZE = 16;
-        public const int ENC_ALG_KEY_SIZE = 32;
+        private const string ENC_ALG = "aes-256-cbc";
+        private const int ENC_ALG_BLOCK_SIZE = 16;
+        private const int ENC_ALG_KEY_SIZE = 32;
+
+        private const int CHUNK = 1_048_576;
+
+        private RandomNumberGenerator rng;
 
         /// <summary>
         /// Client's version
@@ -77,22 +78,10 @@ namespace KsefApi
 		/// </summary>
 		public string Application { get; set; }
 
-		/// <summary>
-		/// HTTPS Proxy
-		/// </summary>
-		public IWebProxy Proxy { get; set; }
-
         /// <summary>
         /// Last error
         /// </summary>
         public Error LastError { get; set; }
-
-        /// <summary>
-        /// Flags which enables legacy SSL/TLS protocols. In case of connection problems, set this flag to true.
-        /// </summary>
-        public bool LegacyProtocolsEnabled { get; set; }
-
-		private RandomNumberGenerator rng;
 
 		/// <summary>
 		/// Create a new client's object
@@ -106,15 +95,7 @@ namespace KsefApi
 			Id = id;
 			Key = key;
 
-			Proxy = WebRequest.GetSystemWebProxy();
-			
 			Clear();
-
-#if KSEFAPI_COM
-			LegacyProtocolsEnabled = true;
-#else
-			LegacyProtocolsEnabled = false;
-#endif
 
 			rng = new RNGCryptoServiceProvider();
 		}
@@ -334,13 +315,14 @@ namespace KsefApi
                 byte[] exponent = br.ReadBytes(expbytes);
 
                 // rsa encrypt
-                RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
                 RSAParameters par = new RSAParameters();
                 par.Modulus = modulus;
                 par.Exponent = exponent;
+
+                RSA rsa = RSA.Create();
                 rsa.ImportParameters(par);
 
-				return rsa.Encrypt(key, false);
+                return rsa.Encrypt(key, RSAEncryptionPadding.OaepSHA256);
             }
             catch (Exception e)
             {
@@ -488,7 +470,7 @@ namespace KsefApi
                 Clear();
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/public/key");
+                string url = (URL + "/invoice/public/key");
 
 				return (KsefPublicKeyResponse)GetObject(url, null, typeof(KsefPublicKeyResponse));
             }
@@ -501,36 +483,56 @@ namespace KsefApi
         }
 
         /// <summary>
-        /// Open a new KSeF session
+        /// Open a new KSeF online session
         /// </summary>
-        /// <param name="invoiceVersion">requested invoice schema version</param>
-        /// <param name="initVector">optional AES256 init vector</param>
-        /// <param name="encryptedKey">optional encrypted AES256 key</param>
-        /// <returns></returns>
-        public KsefSessionOpenResponse KsefSessionOpen(KsefInvoiceVersion invoiceVersion, byte[] initVector = null, byte[] encryptedKey = null)
+        /// <param name="req"request object</param>
+        /// <returns>session details or null</returns>
+        public KsefSessionOpenOnlineResponse KsefSessionOpenOnline(KsefSessionOpenOnlineRequest req)
         {
             try
             {
                 Clear();
 
-                // req
-                KsefSessionOpenRequest req = new KsefSessionOpenRequest();
-
-                req.InvoiceVersion = invoiceVersion;
-                req.InitVector = initVector;
-                req.EncryptedKey = encryptedKey;
-
-                string json = Serialize(req);
-
-                if (json == null)
+                if (req == null)
                 {
+                    Set(ClientError.CLI_INPUT);
                     return null;
                 }
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/session/open");
+                string url = (URL + "/invoice/session/open/online");
 
-                return (KsefSessionOpenResponse)PostObject(url, "application/json", json, null, typeof(KsefSessionOpenResponse));
+                return (KsefSessionOpenOnlineResponse)PostObject(url, req, null, typeof(KsefSessionOpenOnlineResponse));
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Open a new KSeF batch session
+        /// </summary>
+        /// <param name="req"request object</param>
+        /// <returns>session details or null</returns>
+        public KsefSessionOpenBatchResponse KsefSessionOpenBatch(KsefSessionOpenBatchRequest req)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/invoice/session/open/batch");
+
+                return (KsefSessionOpenBatchResponse)PostObject(url, req, null, typeof(KsefSessionOpenBatchResponse));
             }
             catch (Exception e)
             {
@@ -545,14 +547,20 @@ namespace KsefApi
         /// </summary>
         /// <param name="sessionId">session id</param>
         /// <returns>session status or null</returns>
-        public KsefSessionStatusResponse.StatusEnum? KsefSessionStatus(string sessionId)
+        public KsefSessionStatusResponse KsefSessionStatus(string sessionId)
         {
             try
             {
                 Clear();
 
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/session/status/" + HttpUtility.UrlEncode(sessionId));
+                string url = (URL + "/invoice/session/status/" + HttpUtility.UrlEncode(sessionId));
 
                 KsefSessionStatusResponse res = (KsefSessionStatusResponse)GetObject(url, null, typeof(KsefSessionStatusResponse));
 
@@ -561,7 +569,7 @@ namespace KsefApi
                     return null;
                 }
 
-                return res.Status;
+                return res;
             }
             catch (Exception e)
             {
@@ -582,8 +590,14 @@ namespace KsefApi
             {
                 Clear();
 
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return false;
+                }
+
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/session/close/" + HttpUtility.UrlEncode(sessionId));
+                string url = (URL + "/invoice/session/close/" + HttpUtility.UrlEncode(sessionId));
 
                 KsefSessionCloseResponse res = (KsefSessionCloseResponse)GetObject(url, null, typeof(KsefSessionCloseResponse));
 
@@ -603,6 +617,43 @@ namespace KsefApi
         }
 
         /// <summary>
+        /// Get session's invoices info
+        /// </summary>
+        /// <param name="sessionId">session id</param>
+        /// <returns>session's invoices info or null</returns>
+        public KsefSessionInvoicesResponse ksefSessionInvoices(string sessionId)
+        {
+            try
+            {
+                Clear();
+
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/invoice/session/invoices/" + HttpUtility.UrlEncode(sessionId));
+
+                KsefSessionInvoicesResponse res = (KsefSessionInvoicesResponse)GetObject(url, null, typeof(KsefSessionInvoicesResponse));
+
+                if (res == null)
+                {
+                    return null;
+                }
+
+                return res;
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Get UPO for specified session
         /// </summary>
         /// <param name="sessionId">session id</param>
@@ -613,10 +664,16 @@ namespace KsefApi
             {
                 Clear();
 
-                // prepare url
-                Uri url = new Uri(URL + "/invoice/session/upo/" + HttpUtility.UrlEncode(sessionId));
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
 
-                byte[] res = GetBytes(url, "text/xml");
+                // prepare url
+                string url = (URL + "/invoice/session/upo/" + HttpUtility.UrlEncode(sessionId));
+
+                byte[] res = Send(url, null, null, "text/xml, application/json");
 
                 if (res == null)
                 {
@@ -644,6 +701,12 @@ namespace KsefApi
             {
                 Clear();
 
+                if (invoice == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
                 // req
                 KsefInvoiceGenerateRequest req = new KsefInvoiceGenerateRequest(invoice);
 
@@ -651,13 +714,14 @@ namespace KsefApi
 
                 if (json == null)
                 {
+                    Set(ClientError.CLI_JSON);
                     return null;
                 }
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/generate");
+                string url = (URL + "/invoice/generate");
 
-                byte[] res = PostBytes(url, "application/json", json, "text/xml");
+                byte[] res = Send(url, "application/json", new Body(json), "text/xml, application/json");
 
                 if (res == null)
                 {
@@ -685,10 +749,17 @@ namespace KsefApi
             {
                 Clear();
 
-                // prepare url
-                Uri url = new Uri(URL + "/invoice/validate");
+                if (string.IsNullOrEmpty(invoiceXml))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
 
-                return (KsefInvoiceValidateResponse)PostObject(url, "text/xml", invoiceXml, null, typeof(KsefInvoiceValidateResponse));
+                // prepare url
+                string url = (URL + "/invoice/validate");
+
+                return (KsefInvoiceValidateResponse)SendObject(url, "text/xml", new Body(invoiceXml),
+                    null, typeof(KsefInvoiceValidateResponse));
             }
             catch (Exception e)
             {
@@ -700,42 +771,24 @@ namespace KsefApi
         /// <summary>
         /// Send an invoice
         /// </summary>
-        /// <param name="sessionId">session id</param>
-        /// <param name="size">plain invoice size in bytes (only for encrypted data)</param>
-        /// <param name="hash">plain invoice SHA256 hash (only for encrypted data)</param>
-        /// <param name="data">plain or encrypted invoice data</param>
+        /// <param name="req">request object</param>
         /// <returns>sending result with invoice id or null</returns>
-        public KsefInvoiceSendResponse KsefInvoiceSend(string sessionId, int size, byte[] hash, byte[] data)
+        public KsefInvoiceSendResponse KsefInvoiceSend(KsefInvoiceSendRequest req)
         {
             try
             {
                 Clear();
 
-                // req
-                KsefInvoiceSendRequest req = new KsefInvoiceSendRequest(sessionId);
-
-                if (size <= 0 && hash == null)
+                if (req == null)
                 {
-                    KsefInvoicePlain plain = new KsefInvoicePlain(data);
-                    req.Plain = plain;
-                }
-                else
-                {
-                    KsefInvoiceEncrypted enc = new KsefInvoiceEncrypted(size, hash, data);
-                    req.Encrypted = enc;
-                }
-
-                string json = Serialize(req);
-
-                if (json == null)
-                {
+                    Set(ClientError.CLI_INPUT);
                     return null;
                 }
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/send");
+                string url = (URL + "/invoice/send");
 
-                return (KsefInvoiceSendResponse)PostObject(url, "application/json", json, null, typeof(KsefInvoiceSendResponse));
+                return (KsefInvoiceSendResponse)PostObject(url, req, null, typeof(KsefInvoiceSendResponse));
             }
             catch (Exception e)
             {
@@ -756,8 +809,14 @@ namespace KsefApi
             {
                 Clear();
 
+                if (string.IsNullOrEmpty(invoiceId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/status/" + HttpUtility.UrlEncode(invoiceId));
+                string url = (URL + "/invoice/status/" + HttpUtility.UrlEncode(invoiceId));
 
                 return (KsefInvoiceStatusResponse)GetObject(url, null, typeof(KsefInvoiceStatusResponse));
             }
@@ -772,19 +831,24 @@ namespace KsefApi
         /// <summary>
         /// Get an invoice
         /// </summary>
-        /// <param name="sessionId">session id</param>
-        /// <param name="ksefRefNumber">invoice KSeF reference number</param>
-        /// <returns>invoice XML as plain or encrypted data (depends on session type)</returns>
-        public byte[] KsefInvoiceGet(string sessionId, string ksefRefNumber)
+        /// <param name="ksefNumber">invoice KSeF number</param>
+        /// <returns>invoice XML or null</returns>
+        public byte[] KsefInvoiceGet(string ksefNumber)
         {
             try
             {
                 Clear();
 
-                // prepare url
-                Uri url = new Uri(URL + "/invoice/get/" + HttpUtility.UrlEncode(sessionId) + "/" + HttpUtility.UrlEncode(ksefRefNumber));
+                if (string.IsNullOrEmpty(ksefNumber))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
 
-                byte[] res = GetBytes(url, "application/octet-stream");
+                // prepare url
+                string url = (URL + "/invoice/get/" + HttpUtility.UrlEncode(ksefNumber));
+
+                byte[] res = Send(url, null, null, "text/xml, application/json");
 
                 if (res == null)
                 {
@@ -804,37 +868,24 @@ namespace KsefApi
         /// <summary>
         /// Start new invoice query
         /// </summary>
-        /// <param name="sessionId">session id</param>
-        /// <param name="subjectType">invoice subject type (subject1, subject2, subject3, subjectAuthorized)</param>
-        /// <param name="from">begin of range</param>
-        /// <param name="to">end of range</param>
+        /// <param name="req">request object</param>
         /// <returns>new query id or null</returns>
-        public string KsefInvoiceQueryStart(string sessionId, KsefInvoiceQueryStartRequest.SubjectTypeEnum subjectType, DateTime from, DateTime to)
+        public string KsefInvoiceQueryStart(KsefInvoiceQueryStartRequest req)
         {
             try
             {
                 Clear();
 
-                // req
-                KsefInvoiceQueryStartRange range = new KsefInvoiceQueryStartRange();
-                range.From = from;
-                range.To = to;
-
-                KsefInvoiceQueryStartRequest req = new KsefInvoiceQueryStartRequest(sessionId);
-                req.SubjectType = subjectType;
-                req.Range = range;
-
-                string json = Serialize(req);
-
-                if (json == null)
+                if (req == null)
                 {
+                    Set(ClientError.CLI_INPUT);
                     return null;
                 }
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/query/start");
+                string url = (URL + "/invoice/query/start");
 
-                KsefInvoiceQueryStartResponse res = (KsefInvoiceQueryStartResponse)PostObject(url, "application/json", json, null, typeof(KsefInvoiceQueryStartResponse));
+                KsefInvoiceQueryStartResponse res = (KsefInvoiceQueryStartResponse)PostObject(url, req, null, typeof(KsefInvoiceQueryStartResponse));
 
                 if (res == null)
                 {
@@ -854,19 +905,24 @@ namespace KsefApi
         /// <summary>
         /// Get current status of query
         /// </summary>
-        /// <param name="sessionId">session id</param>
         /// <param name="queryId">query id</param>
-        /// <returns>array of result parts numbers</returns>
-        public string[] KsefInvoiceQueryStatus(string sessionId, string queryId)
+        /// <returns>array of result parts numbers or null</returns>
+        public KsefInvoiceQueryStatusResponse KsefInvoiceQueryStatus(string queryId)
         {
             try
             {
                 Clear();
 
+                if (string.IsNullOrEmpty(queryId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+                
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/query/status/" + HttpUtility.UrlEncode(sessionId) + "/" + HttpUtility.UrlEncode(queryId));
+                string url = (URL + "/invoice/query/status/" + HttpUtility.UrlEncode(queryId));
 
-                return (string[])GetObject(url, null, typeof(string[]));
+                return (KsefInvoiceQueryStatusResponse)GetObject(url, null, typeof(KsefInvoiceQueryStatusResponse));
             }
             catch (Exception e)
             {
@@ -879,21 +935,25 @@ namespace KsefApi
         /// <summary>
         /// Get data for specified query part
         /// </summary>
-        /// <param name="sessionId">session id</param>
         /// <param name="queryId">query id</param>
         /// <param name="partNumber">query part number</param>
         /// <returns>plain or encrypted ZIP archive with invoices (depends on session type)</returns>
-        public byte[] KsefInvoiceQueryResult(string sessionId, string queryId, string partNumber)
+        public byte[] KsefInvoiceQueryResult(string queryId, string partNumber)
         {
             try
             {
                 Clear();
 
-                // prepare url
-                Uri url = new Uri(URL + "/invoice/query/result/" + HttpUtility.UrlEncode(sessionId) + "/" + HttpUtility.UrlEncode(queryId)
-                    + "/" + HttpUtility.UrlEncode(partNumber));
+                if (string.IsNullOrEmpty(queryId) || string.IsNullOrEmpty(partNumber))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
 
-                return GetBytes(url, "application/octet-stream");
+                // prepare url
+                string url = (URL + "/invoice/query/result/" + HttpUtility.UrlEncode(queryId) + "/" + HttpUtility.UrlEncode(partNumber));
+
+                return Send(url, null, null, "application/octet-stream, application/json");
             }
             catch (Exception e)
             {
@@ -906,34 +966,274 @@ namespace KsefApi
         /// <summary>
         /// Generate visualization of an invoice
         /// </summary>
-        /// <param name="ksefRefNumber">KSeF reference number</param>
-        /// <param name="invoice">invoice XML data</param>
-        /// <param name="logo">include logo</param>
-        /// <param name="qrcode">include qr-code</param>
-        /// <param name="format">output format (html or pdf)</param>
-        /// <param name="lang">output language (pl)</param>
-        /// <returns>invoice visualization in requested format</returns>
-        public byte[] KsefInvoiceVisualize(string ksefRefNumber, byte[] invoice, bool logo, bool qrcode,
-            KsefInvoiceVisualizeRequest.OutputFormatEnum format, KsefInvoiceVisualizeRequest.OutputLanguageEnum lang)
+        /// <param name="req">request object</param>
+        /// <returns>invoice visualization in requested format or null</returns>
+        public byte[] KsefInvoiceVisualize(KsefInvoiceVisualizeRequest req)
         {
             try
             {
                 Clear();
 
                 // req
-                KsefInvoiceVisualizeRequest req = new KsefInvoiceVisualizeRequest(logo, qrcode, format, lang, ksefRefNumber, invoice);
-
                 string json = Serialize(req);
 
                 if (json == null)
                 {
+                    Set(ClientError.CLI_JSON);
                     return null;
                 }
 
                 // prepare url
-                Uri url = new Uri(URL + "/invoice/visualize");
+                string url = (URL + "/invoice/visualize");
 
-                return PostBytes(url, "application/json", json, "text/html, application/pdf, application/json");
+                return Send(url, "application/json", new Body(json), "application/pdf, text/html, application/json");
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Upload plain invoice XML to KSeF
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <returns>upload result or null</returns>
+        public bool BoxUploadInvoice(BoxUploadInvoiceRequest req)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return false;
+                }
+
+                // prepare url
+                string url = (URL + "/box/upload/invoice");
+
+                BoxUploadInvoiceResponse res = (BoxUploadInvoiceResponse)PostObject(url, req, null, typeof(BoxUploadInvoiceResponse));
+
+			    if (res == null) {
+				    return false;
+			    }
+
+			    return res.Result;
+    		} 
+            catch (Exception e) 
+            {
+			    Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return false;
+	    }
+
+        /// <summary>
+        /// Get status of uploaded invoice
+        /// </summary>
+        /// <param name="uploadId">upload identifier</param>
+        /// <returns>upload result or null</returns>
+        public BoxUploadInvoiceStatusResponse BoxUploadInvoiceStatus(string uploadId)
+        {
+            try
+            {
+                Clear();
+
+                if (string.IsNullOrEmpty(uploadId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/box/upload/invoice/" + HttpUtility.UrlEncode(uploadId));
+
+                return (BoxUploadInvoiceStatusResponse)GetObject(url, null, typeof(BoxUploadInvoiceStatusResponse));
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Upload batch of plain invoices XMLs to KSeF
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <param name="file">batch file path (ZIP archive)</param>
+        /// <returns>upload result or null</returns>
+        public bool BoxUploadBatch(BoxUploadBatchRequest req, string file)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null || file == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return false;
+                }
+
+                // boundary
+                string boundary = Guid.NewGuid().ToString("N");
+
+                // prepare url
+                string url = (URL + "/box/upload/batch");
+
+                BoxUploadInvoiceResponse res = (BoxUploadInvoiceResponse)SendObject(url, "multipart/form-data; boundary=" + boundary,
+                    new Body(boundary, req, file), null, typeof(BoxUploadInvoiceResponse));
+
+                if (res == null)
+                {
+                    return false;
+                }
+
+                return res.Result;
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Upload batch of plain invoices XMLs to KSeF
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <param name="file">batch file content (ZIP archive)</param>
+        /// <returns>upload result or null</returns>
+        public bool BoxUploadBatch(BoxUploadBatchRequest req, byte[] file)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null || file == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return false;
+                }
+
+                // boundary
+                string boundary = Guid.NewGuid().ToString("N");
+
+                // prepare url
+                string url = (URL + "/box/upload/batch");
+
+                BoxUploadInvoiceResponse res = (BoxUploadInvoiceResponse)SendObject(url, "multipart/form-data; boundary=" + boundary,
+                    new Body(boundary, req, file), null, typeof(BoxUploadInvoiceResponse));
+
+                if (res == null)
+                {
+                    return false;
+                }
+
+                return res.Result;
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Get status of uploaded batch
+        /// </summary>
+        /// <param name="uploadId">upload identifier</param>
+        /// <returns>upload result or null</returns>
+        public BoxUploadBatchStatusResponse BoxUploadBatchStatus(string uploadId)
+        {
+            try
+            {
+                Clear();
+
+                if (string.IsNullOrEmpty(uploadId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/box/upload/batch/" + HttpUtility.UrlEncode(uploadId));
+
+                return (BoxUploadBatchStatusResponse)GetObject(url, null, typeof(BoxUploadBatchStatusResponse));
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Send query for invoice download
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <returns>sending result or null</returns>
+        public bool BoxDownloadInvoices(BoxDownloadInvoicesRequest req)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return false;
+                }
+
+                // prepare url
+                string url = (URL + "/box/download/invoices");
+
+                BoxDownloadInvoicesResponse res = (BoxDownloadInvoicesResponse)PostObject(url, req, null, typeof(BoxDownloadInvoicesResponse));
+
+                if (res == null)
+                {
+                    return false;
+                }
+
+                return res.Result;
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Get result of download query
+        /// </summary>
+        /// <param name="downloadId">download identifier</param>
+        /// <returns>download result (ZIP archive) or null</returns>
+        public byte[] BoxDownloadInvoicesResult(string downloadId)
+        {
+            try
+            {
+                Clear();
+
+                if (string.IsNullOrEmpty(downloadId))
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/box/download/invoices/" + HttpUtility.UrlEncode(downloadId));
+
+                return Send(url, null, null, "application/zip, application/json");
             }
             catch (Exception e)
             {
@@ -992,57 +1292,77 @@ namespace KsefApi
         }
 
         /// <summary>
-		/// HTTP GET
+        /// HTTP GET/POST
         /// </summary>
         /// <param name="url">request URL</param>
+		/// <param name="contentType">request content type</param>
+		/// <param name="content">request content bytes</param>
 		/// <param name="accept">accepted response mime type (application/xml or application/json)</param>
         /// <returns>response data or null</returns>
-        private byte[] GetBytes(Uri url, string accept)
+        private byte[] Send(string url, string contentType, Body content, string accept)
         {
             try
             {
-                if (!LegacyProtocolsEnabled)
+                bool post = (!string.IsNullOrEmpty(contentType) && content != null);
+
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                request.Method = "GET";
+                request.AllowWriteStreamBuffering = false;
+                request.AllowAutoRedirect = true;
+                request.SendChunked = false;
+
+                request.Headers.Add(HttpRequestHeader.Accept, accept);
+                request.Headers.Add(HttpRequestHeader.Authorization, GetAuthHeader());
+                request.Headers.Add(HttpRequestHeader.UserAgent, GetAgentHeader());
+
+                if (post)
                 {
-                    // SecurityProtocolType:
-                    // Tls		192
-                    // Tls11	768
-                    // Tls12	3072
-                    // Tls13	12288
-                    try
+                    request.Method = "POST";
+                    request.ContentType = contentType;
+                    request.ContentLength = content.Length();
+
+                    using (Stream rs = request.GetRequestStream())
                     {
-                        ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072 | (SecurityProtocolType)12288;
-                    }
-                    catch (Exception)
-                    {
-                        // no tls13
-                        try
+                        if (content.Prefix != null)
                         {
-                            ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072;
+                            rs.Write(content.Prefix, 0, content.Prefix.Length);
                         }
-                        catch (Exception)
+
+                        if (!string.IsNullOrEmpty(content.Path))
                         {
-                            // no tls12
-                            try
+                            using (var fs = new FileStream(content.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
                             {
-                                ServicePointManager.SecurityProtocol = (SecurityProtocolType)768;
+                                byte[] buffer = new byte[CHUNK];
+                                int read;
+
+                                while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    rs.Write(buffer, 0, read);
+                                }
                             }
-                            catch (Exception)
-                            {
-                                // no tls11
-                            }
+                        }
+
+                        if (content.Bytes != null)
+                        {
+                            rs.Write(content.Bytes, 0, content.Bytes.Length);
+                        }
+
+                        if (content.Suffix != null)
+                        {
+                            rs.Write(content.Suffix, 0, content.Suffix.Length);
                         }
                     }
                 }
 
-                using (WebClient wc = new WebClient())
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream rs = response.GetResponseStream())
                 {
-                    wc.Proxy = Proxy;
+                    if (rs == null)
+                    {
+                        return Array.Empty<byte>();
+                    }
 
-					wc.Headers.Set("Accept", accept);
-                    wc.Headers.Set("Authorization", GetAuthHeader());
-                    wc.Headers.Set("User-Agent", GetAgentHeader());
-
-                    return wc.DownloadData(url);
+                    return ReadAllBytes(rs);
                 }
             }
             catch (WebException we)
@@ -1058,67 +1378,41 @@ namespace KsefApi
         }
 
         /// <summary>
-        /// HTTP POST
+        /// Send request and get response as object
         /// </summary>
         /// <param name="url">request URL</param>
-		/// <param name="contentType">request content type</param>
-		/// <param name="content">request content bytes</param>
-		/// <param name="accept">accepted response mime type (application/xml or application/json)</param>
-        /// <returns>response data or null</returns>
-        private byte[] PostBytes(Uri url, string contentType, string content, string accept)
+        /// <param name="contentType">request content type</param>
+        /// <param name="content">request content bytes</param>
+        /// <param name="attr">JSON attribute name to return (null - root element)</param>
+        /// <param name="type">object type to return</param>
+        /// <returns>response object lub null</returns>
+        private object SendObject(string url, string contentType, Body content, string attr, Type type)
         {
             try
             {
-                if (!LegacyProtocolsEnabled)
+                // get response
+                byte[] b = Send(url, contentType, content, "application/json");
+
+                if (b == null)
                 {
-                    // SecurityProtocolType:
-                    // Tls		192
-                    // Tls11	768
-                    // Tls12	3072
-                    // Tls13	12288
-                    try
-                    {
-                        ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072 | (SecurityProtocolType)12288;
-                    }
-                    catch (Exception e1)
-                    {
-                        // no tls13
-                        try
-                        {
-                            ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072;
-                        }
-                        catch (Exception e2)
-                        {
-                            // no tls12
-                            try
-                            {
-                                ServicePointManager.SecurityProtocol = (SecurityProtocolType)768;
-                            }
-                            catch (Exception e3)
-                            {
-                                // no tls11
-                            }
-                        }
-                    }
+                    return null;
                 }
 
-                byte[] req = Encoding.UTF8.GetBytes(content);
+                // parse
+                JObject json = Deserialize(b);
 
-                using (WebClient wc = new WebClient())
+                if (json == null)
                 {
-                    wc.Proxy = Proxy;
-
-                    wc.Headers.Set("Accept", accept);
-                    wc.Headers.Set("Authorization", GetAuthHeader());
-                    wc.Headers.Set("Content-Type", contentType + "; charset=UTF-8");
-                    wc.Headers.Set("User-Agent", GetAgentHeader());
-
-                    return wc.UploadData(url, "POST", req);
+                    return null;
                 }
-            }
-            catch (WebException we)
-            {
-                Set(we);
+
+                if (json.ContainsKey("error"))
+                {
+                    Set((int)json["error"]["code"], (string)json["error"]["description"], (string)json["error"]["details"]);
+                    return null;
+                }
+
+                return (string.IsNullOrEmpty(attr) ? json.ToObject(type) : json[attr].ToObject(type));
             }
             catch (Exception e)
             {
@@ -1135,12 +1429,12 @@ namespace KsefApi
 		/// <param name="attr">JSON attribute name to return (null - root element)</param>
         /// <param name="type">object type to return</param>
         /// <returns>response object lub null</returns>
-        private object GetObject(Uri url, string attr, Type type)
+        private object GetObject(string url, string attr, Type type)
 		{
             try
             {
 				// get response
-                byte[] b = GetBytes(url, "application/json");
+                byte[] b = Send(url, null, null, "application/json");
 
                 if (b == null)
                 {
@@ -1172,20 +1466,28 @@ namespace KsefApi
         }
 
         /// <summary>
-        /// Get response as object
+        /// Post object and get response as object
         /// </summary>
         /// <param name="url">request URL</param>
-        /// <param name="contentType">request content type</param>
-        /// <param name="content">request content bytes</param>
+        /// <param name="obj">request object</param>
         /// <param name="attr">JSON attribute name to return (null - root element)</param>
         /// <param name="type">object type to return</param>
         /// <returns>response object lub null</returns>
-        private object PostObject(Uri url, string contentType, string content, string attr, Type type)
+        private object PostObject(string url, object obj, string attr, Type type)
         {
             try
             {
+                // req
+                string req = Serialize(obj);
+
+                if (req == null)
+                {
+                    Set(ClientError.CLI_JSON);
+                    return false;
+                }
+
                 // get response
-                byte[] b = PostBytes(url, contentType, content, "application/json");
+                byte[] b = Send(url, "application/json", new Body(req), "application/json");
 
                 if (b == null)
                 {
@@ -1220,8 +1522,8 @@ namespace KsefApi
         /// Serialize object into JSON bytes
         /// </summary>
         /// <param name="obj"></param>
-        /// <returns></returns>
-        private string Serialize(object obj)
+        /// <returns>JSON string or null</returns>
+        private static string Serialize(object obj)
         {
             JsonSerializerSettings s = new JsonSerializerSettings
             {
@@ -1232,15 +1534,13 @@ namespace KsefApi
             {
                 if (obj == null)
                 {
-                    Set(ClientError.CLI_SEND);
                     return null;
                 }
 
                 return JsonConvert.SerializeObject(obj, s);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                Set(ClientError.CLI_EXCEPTION, e.Message);
             }
 
             return null;
@@ -1316,57 +1616,6 @@ namespace KsefApi
 			return string.Format("Basic {0}", b64);
 		}
 
-		/// <summary>
-		/// Zwraca wartość węzła XML jako ciąg tekstowy
-		/// </summary>
-		/// <param name="doc">dokument XML</param>
-		/// <param name="path">wyrażenie XPath wybierające wartość</param>
-		/// <param name="def">wartość domyślna zwracana w przypadku braku wartości w XML</param>
-		/// <returns>ciąg tekstowy</returns>
-		private string GetString(XPathDocument doc, string path, string def)
-		{
-			try
-			{
-				XPathNavigator xpn = doc.CreateNavigator();
-
-				string val = xpn.SelectSingleNode(path).Value;
-
-				if (val != null)
-				{
-					return val;
-				}
-			}
-			catch (Exception)
-			{
-			}
-
-			return def;
-		}
-
-		/// <summary>
-		/// Zwraca wartość węzła XML jako obiekt daty i czasu lokalnego
-		/// </summary>
-		/// <param name="doc">dokument XML</param>
-		/// <param name="path">wyrażenie XPath wybierające wartość</param>
-		/// <returns>data i czas lokalny lub null</returns>
-		private DateTime? GetDateTime(XPathDocument doc, string path)
-		{
-			try
-			{
-				string val = GetString(doc, path, null);
-
-				if (val != null)
-				{
-					return XmlConvert.ToDateTime(val, XmlDateTimeSerializationMode.Local);
-				}
-			}
-			catch (Exception)
-			{
-			}
-
-			return null;
-		}
-
         /// <summary>
         /// Compare two byte arrays
         /// </summary>
@@ -1403,7 +1652,7 @@ namespace KsefApi
         private byte[] ReadAllBytes(Stream s)
         {
             MemoryStream ms = new MemoryStream();
-            byte[] b = new byte[8192];
+            byte[] b = new byte[CHUNK];
             int read;
 
             while ((read = s.Read(b, 0, b.Length)) > 0)
@@ -1412,6 +1661,130 @@ namespace KsefApi
             }
 
             return ms.ToArray();
+        }
+
+        /// <summary>
+        /// Http request body
+        /// </summary>
+        class Body
+        {
+            public byte[] Prefix { get; }
+            public string Path { get; }
+            public byte[] Bytes { get; }
+            public byte[] Suffix { get; }
+
+            /// <summary>
+            /// Create a simple request body
+            /// </summary>
+            /// <param name="data">body content</param>
+            public Body(string data)
+            {
+                Bytes = Encoding.UTF8.GetBytes(data);
+            }
+
+            /// <summary>
+            /// Build multipart body with JSON request and ZIP file
+            /// </summary>
+            /// <param name="boundary">mulitpart boundary name</param>
+            /// <param name="obj">request object (name="request")</param>
+            /// <param name="path">ZIP file path (name="file")</param>
+            public Body(string boundary, object obj, string path)
+            {
+                string json = Serialize(obj);
+
+                if (json == null)
+                {
+                    throw new InvalidOperationException("Failed to convert object to JSON");
+                }
+
+                string prefix = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"request\"\r\n"
+                    + "Content-Type: application/json\r\n"
+                    + "\r\n"
+                    + json + "\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; filename=\"batch.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n"
+                    + "\r\n";
+
+                string suffix = "\r\n"
+                    + "--" + boundary + "--\r\n";
+
+                Prefix = Encoding.UTF8.GetBytes(prefix);
+                Path = path;
+                Suffix = Encoding.UTF8.GetBytes(suffix);
+            }
+
+            /// <summary>
+            /// Build multipart body with JSON request and ZIP bytes
+            /// </summary>
+            /// <param name="boundary">mulitpart boundary name</param>
+            /// <param name="obj">request object (name="request")</param>
+            /// <param name="file">ZIP file content (name="file")</param>
+            public Body(string boundary, object obj, byte[] bytes)
+            {
+                string json = Serialize(obj);
+
+                if (json == null)
+                {
+                    throw new InvalidOperationException("Failed to convert object to JSON");
+                }
+
+                string prefix = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"request\"\r\n"
+                    + "Content-Type: application/json\r\n"
+                    + "\r\n"
+                    + json + "\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; filename=\"batch.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n"
+                    + "\r\n";
+
+                string suffix = "\r\n"
+                    + "--" + boundary + "--\r\n";
+
+                Prefix = Encoding.UTF8.GetBytes(prefix);
+                Bytes = bytes;
+                Suffix = Encoding.UTF8.GetBytes(suffix);
+            }
+
+            /// <summary>
+            /// Total length of body parts
+            /// </summary>
+            /// <returns>body length</returns>
+            public long Length()
+            {
+                long length = 0;
+
+                if (Prefix != null)
+                {
+                    length += Prefix.Length;
+                }
+
+                if (!string.IsNullOrEmpty(Path))
+                {
+                    FileInfo fi = new FileInfo(Path);
+
+                    if (!fi.Exists)
+                    {
+                        throw new FileNotFoundException("File not found: " + Path);
+                    }
+
+                    length += fi.Length;
+                }
+
+                if (Bytes != null)
+                {
+                    length += Bytes.Length;
+                }
+
+                if (Suffix != null)
+                {
+                    length += Suffix.Length;
+                }
+
+                return length;
+            }
         }
     }
 }
