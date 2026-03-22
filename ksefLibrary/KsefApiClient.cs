@@ -28,6 +28,7 @@ using System.IO;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Web;
 
 namespace KsefApi
@@ -37,7 +38,7 @@ namespace KsefApi
 	/// </summary>
 	public class KsefApiClient
 	{
-		public const string VERSION = "2.0.1";
+		public const string VERSION = "2.0.2";
 
 		public const string PRODUCTION_URL = "https://ksefapi.pl/api";
 		public const string TEST_URL = "https://ksefapi.pl/api-test";
@@ -964,6 +965,39 @@ namespace KsefApi
         }
 
         /// <summary>
+        /// Generate invoice URL links and QR codes
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <returns>URLs and QR codes or null</returns>
+        public KsefInvoiceLinksResponse ksefInvoiceLinks(KsefInvoiceLinksRequest req)
+        {
+            try
+            {
+                Clear();
+
+                // req
+                string json = Serialize(req);
+
+                if (json == null)
+                {
+                    Set(ClientError.CLI_JSON);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/invoice/links");
+
+                return (KsefInvoiceLinksResponse)PostObject(url, req, null, typeof(KsefInvoiceLinksResponse));
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Generate visualization of an invoice
         /// </summary>
         /// <param name="req">request object</param>
@@ -1241,6 +1275,86 @@ namespace KsefApi
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Poll until an asynchronous operation is ready
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="callback">function to call</param>
+        /// <param name="tries">number of tries</param>
+        /// <param name="seconds">delay between tries (in sec)</param>
+        /// <returns>value returned from callback or default in case of error</returns>
+        public T WaitForResult<T>(Func<T> callback, int tries = 40, int seconds = 15)
+        {
+            int ms = seconds * 1000;
+
+            for (int i = 0; i < tries; i++)
+            {
+                T res = callback();
+
+                if (res == null)
+                {
+                    if (LastError != null && (LastError.Code == 100 || LastError.Code == 150))
+                    {
+                        // still processing
+                        Thread.Sleep(ms);
+                        continue;
+                    }
+                    else
+                    {
+                        // error
+                        return default;
+                    }
+                }
+
+                if (res is KsefInvoiceStatusResponse isr)
+                {
+                    if (isr.InvoiceInfo.Status.Code < 200)
+                    {
+                        // still processing
+                        Thread.Sleep(ms);
+                        continue;
+                    }
+                    else if (isr.InvoiceInfo.Status.Code == 200)
+                    {
+                        // ready
+                        return res;
+                    }
+                    else
+                    {
+                        // error
+                        return default;
+                    }
+                }
+                else if (res is KsefSessionStatusResponse ssr)
+                {
+                    if (ssr.SessionInfo.Status.Code < 200 && ssr.SessionInfo.Status.Code != 170)
+                    {
+                        // still processing
+                        Thread.Sleep(ms);
+                        continue;
+                    }
+                    else if (ssr.SessionInfo.Status.Code == 200)
+                    {
+                        // ready
+                        return res;
+                    }
+                    else
+                    {
+                        // error
+                        return default;
+                    }
+                }
+                else
+                {
+                    // ready
+                    return res;
+                }
+            }
+
+            // timeout, no result
+            return default;
         }
 
         /// <summary>

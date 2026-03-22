@@ -26,30 +26,48 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// KsefSessionCloseResponse
+    /// KsefQrCode
     /// </summary>
-    [DataContract(Name = "KsefSessionCloseResponse")]
-    public partial class KsefSessionCloseResponse
+    [DataContract(Name = "KsefQrCode")]
+    public partial class KsefQrCode
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefSessionCloseResponse" /> class.
+        /// Initializes a new instance of the <see cref="KsefQrCode" /> class.
         /// </summary>
         [JsonConstructorAttribute]
-        protected KsefSessionCloseResponse() { }
+        protected KsefQrCode() { }
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefSessionCloseResponse" /> class.
+        /// Initializes a new instance of the <see cref="KsefQrCode" /> class.
         /// </summary>
-        /// <param name="result">result (required).</param>
-        public KsefSessionCloseResponse(bool result = default)
+        /// <param name="link">link (required).</param>
+        /// <param name="image">image (required).</param>
+        public KsefQrCode(string link = default, string image = default)
         {
-            this.Result = result;
+            // to ensure "link" is required (not null)
+            if (link == null)
+            {
+                throw new ArgumentNullException("link is a required property for KsefQrCode and cannot be null");
+            }
+            this.Link = link;
+            // to ensure "image" is required (not null)
+            if (image == null)
+            {
+                throw new ArgumentNullException("image is a required property for KsefQrCode and cannot be null");
+            }
+            this.Image = image;
         }
 
         /// <summary>
-        /// Gets or Sets Result
+        /// Gets or Sets Link
         /// </summary>
-        [DataMember(Name = "result", IsRequired = true, EmitDefaultValue = true)]
-        public bool Result { get; set; }
+        [DataMember(Name = "link", IsRequired = true, EmitDefaultValue = true)]
+        public string Link { get; set; }
+
+        /// <summary>
+        /// Gets or Sets Image
+        /// </summary>
+        [DataMember(Name = "image", IsRequired = true, EmitDefaultValue = true)]
+        public string Image { get; set; }
 
         /// <summary>
         /// Returns the string presentation of the object
@@ -58,8 +76,9 @@ namespace KsefApi.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class KsefSessionCloseResponse {\n");
-            sb.Append("  Result: ").Append(Result).Append("\n");
+            sb.Append("class KsefQrCode {\n");
+            sb.Append("  Link: ").Append(Link).Append("\n");
+            sb.Append("  Image: ").Append(Image).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }

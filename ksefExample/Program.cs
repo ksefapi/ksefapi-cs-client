@@ -18,9 +18,9 @@
  * @license http://www.apache.org/licenses/LICENSE-2.0
  */
 
+using KsefApi.Model;
 using System.IO.Compression;
 using System.Text;
-using KsefApi.Model;
 
 namespace KsefApi.Example
 {
@@ -69,6 +69,7 @@ namespace KsefApi.Example
                 CreateAndSendInvoice();
                 CreateAndSendBatch();
 
+                GetInvoiceLinks();
                 VisualizeInvoiceXml();
 
                 GetInvoiceByKsefNumber();
@@ -535,7 +536,8 @@ namespace KsefApi.Example
                 Console.WriteLine("KSeF invoice id: " + isr.Id);
 
                 // check an invoice status (and fetch KSeF number and acquisition date)
-                KsefInvoiceStatusResponse str = KsefApi.KsefInvoiceStatus(isr.Id);
+                //KsefInvoiceStatusResponse str = KsefApi.KsefInvoiceStatus(isr.Id);
+                KsefInvoiceStatusResponse? str = KsefApi.WaitForResult(() => KsefApi.KsefInvoiceStatus(isr.Id));
 
                 if (str == null)
                 {
@@ -557,6 +559,15 @@ namespace KsefApi.Example
                     return;
                 }
 
+                // wait for the UPO
+                KsefSessionStatusResponse? ssr = KsefApi.WaitForResult(() => KsefApi.KsefSessionStatus(soor.Id));
+
+                if (ssr == null)
+                {
+                    Console.Error.WriteLine("ERR: KsefSessionStatus failed: " + KsefApi.LastError);
+                    return;
+                }
+
                 // get UPO
                 string upo = KsefApi.KsefSessionUpo(soor.Id);
 
@@ -571,7 +582,7 @@ namespace KsefApi.Example
                 string path = CreateTempFile("upo-", ".xml");
                 File.WriteAllText(path, upo, Encoding.UTF8);
 
-                Console.WriteLine("CreateAndSendInvoice: upo saved to: " + path);
+                Console.WriteLine("UPO saved to: " + path);
 
                 Console.WriteLine("CreateAndSendInvoice: done");
             }
@@ -662,33 +673,11 @@ namespace KsefApi.Example
 
                 // wait for the batch to be processed (we're using a simple loop here, but in real applications
                 // you should use a more sophisticated method)
-                KsefSessionStatusResponse? ssr = null;
-
-                for (int i = 0; i < 20; i++)
-                {
-                    ssr = KsefApi.KsefSessionStatus(sobr.Id);
-
-                    if (ssr != null)
-                    {
-                        Console.WriteLine("Batch processed");
-                        break;
-                    }
-
-                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
-                    {
-                        Console.WriteLine("Still processing...");
-                        Thread.Sleep(30000);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("ERR: KsefSessionStatus failed: " + KsefApi.LastError);
-                        break;
-                    }
-                }
+                KsefSessionStatusResponse? ssr = KsefApi.WaitForResult(() => KsefApi.KsefSessionStatus(sobr.Id));
 
                 if (ssr == null)
                 {
-                    Console.Error.WriteLine("Timed out, batch not processed (it may need more time)");
+                    Console.Error.WriteLine("ERR: KsefSessionStatus failed: " + KsefApi.LastError);
                     return;
                 }
 
@@ -718,7 +707,7 @@ namespace KsefApi.Example
                 string path = CreateTempFile("upo-", ".xml");
                 File.WriteAllText(path, upo, Encoding.UTF8);
 
-                Console.WriteLine("CreateAndSendBatch: upo saved to: " + path);
+                Console.WriteLine("UPO saved to: " + path);
 
                 Console.WriteLine("CreateAndSendBatch: done");
             }
@@ -751,7 +740,7 @@ namespace KsefApi.Example
                 string path = CreateTempFile("invoice-", ".xml");
                 File.WriteAllBytes(path, xml);
 
-                Console.WriteLine("GetInvoiceByKsefNumber: invoice saved to: " + path);
+                Console.WriteLine("Invoice saved to: " + path);
 
                 Console.WriteLine("GetInvoiceByKsefNumber: done");
             }
@@ -791,33 +780,11 @@ namespace KsefApi.Example
 
                 // wait for the result (we're using a simple loop here, but in real applications
                 // you should use a more sophisticated method)
-                KsefInvoiceQueryStatusResponse? iqsr = null;
-
-                for (int i = 0; i < 20; i++)
-                {
-                    iqsr = KsefApi.KsefInvoiceQueryStatus(queryId);
-
-                    if (iqsr != null)
-                    {
-                        Console.WriteLine("Query result is ready");
-                        break;
-                    }
-
-                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
-                    {
-                        Console.WriteLine("Still processing...");
-                        Thread.Sleep(30000);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("ERR: KsefInvoiceQueryStart failed: " + KsefApi.LastError);
-                        break;
-                    }
-                }
+                KsefInvoiceQueryStatusResponse? iqsr = KsefApi.WaitForResult(() => KsefApi.KsefInvoiceQueryStatus(queryId));
 
                 if (iqsr == null)
                 {
-                    Console.Error.WriteLine("Timed out, no query result (it may need more time)");
+                    Console.Error.WriteLine("ERR: KsefInvoiceQueryStatus failed: " + KsefApi.LastError);
                     return;
                 }
 
@@ -837,7 +804,7 @@ namespace KsefApi.Example
                     string path = CreateTempFile("invoices-", ".zip.enc");
                     File.WriteAllBytes(path, data);
 
-                    Console.WriteLine("GetInvoicesByTimeRange: encrypted part saved to: " + path);
+                    Console.WriteLine("Encrypted part saved to: " + path);
                 }
 
                 Console.WriteLine("GetInvoicesByTimeRange: done");
@@ -845,6 +812,47 @@ namespace KsefApi.Example
             catch (Exception e)
             {
                 Console.Error.WriteLine("GetInvoicesByTimeRange: " + e);
+            }
+        }
+
+        /// <summary>
+        /// Generate invoice URL links and QR codes
+        /// </summary>
+        private static void GetInvoiceLinks()
+        {
+            Console.WriteLine("GetInvoiceLinks");
+
+            try
+            {
+                string xml = GetInvoiceXml();
+                byte[] data = Encoding.UTF8.GetBytes(xml);
+                byte[] hash = KsefApi.GetHash(data);
+
+                // get URLs and QR codes for visualization
+                KsefInvoiceLinksRequest il = new KsefInvoiceLinksRequest(SellerNIP, Now, hash, KsefNumber);
+
+                KsefInvoiceLinksResponse ilr = KsefApi.ksefInvoiceLinks(il);
+
+                if (ilr == null)
+                {
+                    Console.Error.WriteLine("ERR: ksefInvoiceLinks failed: " + KsefApi.LastError);
+                    return;
+                }
+
+                Console.WriteLine("Invoice link: " + ilr.Invoice.Link);
+                Console.WriteLine("Invoice QR image: " + ilr.Invoice.Image);
+
+                if (ilr.Certificate != null)
+                {
+                    Console.WriteLine("Certificate link: " + ilr.Certificate.Link);
+                    Console.WriteLine("Certificate QR image: " + ilr.Certificate.Image);
+                }
+
+                Console.WriteLine("GetInvoiceLinks: done");
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("GetInvoiceLinks: " + e);
             }
         }
 
@@ -875,7 +883,7 @@ namespace KsefApi.Example
                 string path = CreateTempFile("invoice-", ".html");
                 File.WriteAllBytes(path, html);
 
-                Console.WriteLine("VisualizeInvoiceXml: html saved to: " + path);
+                Console.WriteLine("HTML saved to: " + path);
 
                 // visualize invoice xml as pdf (still needs improvements)
                 iv = new KsefInvoiceVisualizeRequest(null, string.IsNullOrEmpty(KsefNumber), KsefNumber,
@@ -892,7 +900,7 @@ namespace KsefApi.Example
                 path = CreateTempFile("invoice-", ".pdf");
                 File.WriteAllBytes(path, pdf);
 
-                Console.WriteLine("VisualizeInvoiceXml: pdf saved to: " + path);
+                Console.WriteLine("PDF saved to: " + path);
 
                 Console.WriteLine("VisualizeInvoiceXml: done");
             }
@@ -918,7 +926,7 @@ namespace KsefApi.Example
                 // (e.g., an order number)
                 string uploadId = Guid.NewGuid().ToString();
 
-                BoxUploadInvoiceRequest req = new BoxUploadInvoiceRequest(uploadId, false, false, Encoding.UTF8.GetBytes(xml));
+                BoxUploadInvoiceRequest req = new BoxUploadInvoiceRequest(uploadId, false, false, true, Encoding.UTF8.GetBytes(xml));
 
                 if (!KsefApi.BoxUploadInvoice(req))
                 {
@@ -928,37 +936,24 @@ namespace KsefApi.Example
 
                 // wait for the result (we're using a simple loop here, but in real applications
                 // you should use a more sophisticated method)
-                BoxUploadInvoiceStatusResponse? res = null;
-
-                for (int i = 0; i < 20; i++)
-                {
-                    res = KsefApi.BoxUploadInvoiceStatus(uploadId);
-
-                    if (res != null)
-                    {
-                        Console.WriteLine("Invoice result is ready");
-                        break;
-                    }
-
-                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
-                    {
-                        Console.WriteLine("Still processing...");
-                        Thread.Sleep(30000);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("ERR: BoxUploadInvoiceStatus failed: " + KsefApi.LastError);
-                        break;
-                    }
-                }
+                BoxUploadInvoiceStatusResponse? res = KsefApi.WaitForResult(() => KsefApi.BoxUploadInvoiceStatus(uploadId));
 
                 if (res == null)
                 {
-                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    Console.Error.WriteLine("ERR: BoxUploadInvoiceStatus failed: " + KsefApi.LastError);
                     return;
                 }
 
                 PrintInvoiceInfo(res.InvoiceInfo);
+                Console.WriteLine("Session id: " + res.SessionId);
+
+                if (res.Upo != null)
+                {
+                    string path = CreateTempFile("upo-", ".xml");
+                    File.WriteAllBytes(path, res.Upo);
+
+                    Console.WriteLine("UPO saved to: " + path);
+                }
 
                 Console.WriteLine("UploadInvoice: done");
             }
@@ -984,7 +979,7 @@ namespace KsefApi.Example
                 // (e.g., an order number)
                 string uploadId = Guid.NewGuid().ToString();
 
-                BoxUploadBatchRequest req = new BoxUploadBatchRequest(uploadId, true, false, KsefInvoiceVersion.V3);
+                BoxUploadBatchRequest req = new BoxUploadBatchRequest(uploadId, true, false, true, KsefInvoiceVersion.V3);
 
                 if (!KsefApi.BoxUploadBatch(req, batch))
                 {
@@ -994,33 +989,11 @@ namespace KsefApi.Example
 
                 // wait for the result (we're using a simple loop here, but in real applications
                 // you should use a more sophisticated method)
-                BoxUploadBatchStatusResponse? res = null;
-
-                for (int i = 0; i < 20; i++)
-                {
-                    res = KsefApi.BoxUploadBatchStatus(uploadId);
-
-                    if (res != null)
-                    {
-                        Console.WriteLine("Batch result is ready");
-                        break;
-                    }
-
-                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
-                    {
-                        Console.WriteLine("Still processing...");
-                        Thread.Sleep(30000);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("ERR: BoxUploadBatchStatus failed: " + KsefApi.LastError);
-                        break;
-                    }
-                }
+                BoxUploadBatchStatusResponse? res = KsefApi.WaitForResult(() => KsefApi.BoxUploadBatchStatus(uploadId));
 
                 if (res == null)
                 {
-                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    Console.Error.WriteLine("ERR: BoxUploadBatchStatus failed: " + KsefApi.LastError);
                     return;
                 }
 
@@ -1029,6 +1002,16 @@ namespace KsefApi.Example
                     PrintInvoiceInfo(ii);
                 }
 
+                Console.WriteLine("Session id: " + res.SessionId);
+
+                if (res.Upo != null)
+                {
+                    string path = CreateTempFile("upo-", ".xml");
+                    File.WriteAllBytes(path, res.Upo);
+
+                    Console.WriteLine("UPO saved to: " + path);
+                }
+                
                 Console.WriteLine("UploadBatch: done");
             }
             catch (Exception e)
@@ -1065,33 +1048,11 @@ namespace KsefApi.Example
 
                 // wait for the result (we're using a simple loop here, but in real applications
                 // you should use a more sophisticated method)
-                byte[]? res = null;
-
-                for (int i = 0; i < 20; i++)
-                {
-                    res = KsefApi.BoxDownloadInvoicesResult(downloadId);
-
-                    if (res != null)
-                    {
-                        Console.WriteLine("Result is ready");
-                        break;
-                    }
-
-                    if (KsefApi.LastError != null && KsefApi.LastError.Code == 150)
-                    {
-                        Console.WriteLine("Still processing...");
-                        Thread.Sleep(30000);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("ERR: BoxDownloadInvoicesResult failed: " + KsefApi.LastError);
-                        break;
-                    }
-                }
+                byte[]? res = KsefApi.WaitForResult(() => KsefApi.BoxDownloadInvoicesResult(downloadId));
 
                 if (res == null)
                 {
-                    Console.Error.WriteLine("Timed out, no result (it may need more time)");
+                    Console.Error.WriteLine("ERR: BoxDownloadInvoicesResult failed: " + KsefApi.LastError);
                     return;
                 }
 
@@ -1100,7 +1061,7 @@ namespace KsefApi.Example
                 string path = CreateTempFile("invoices-", ".zip");
                 File.WriteAllBytes(path, res);
 
-                Console.WriteLine("DownloadInvoices: invoices saved to: " + path);
+                Console.WriteLine("Invoices saved to: " + path);
 
                 Console.WriteLine("DownloadInvoices: done");
             }

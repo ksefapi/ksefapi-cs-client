@@ -26,44 +26,53 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// KsefInvoiceEncrypted
+    /// KsefInvoiceLinksRequest
     /// </summary>
-    [DataContract(Name = "KsefInvoiceEncrypted")]
-    public partial class KsefInvoiceEncrypted
+    [DataContract(Name = "KsefInvoiceLinksRequest")]
+    public partial class KsefInvoiceLinksRequest
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefInvoiceEncrypted" /> class.
+        /// Initializes a new instance of the <see cref="KsefInvoiceLinksRequest" /> class.
         /// </summary>
         [JsonConstructorAttribute]
-        protected KsefInvoiceEncrypted() { }
+        protected KsefInvoiceLinksRequest() { }
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefInvoiceEncrypted" /> class.
+        /// Initializes a new instance of the <see cref="KsefInvoiceLinksRequest" /> class.
         /// </summary>
-        /// <param name="invoiceSize">invoiceSize (required).</param>
+        /// <param name="nip">nip (required).</param>
+        /// <param name="issueDate">issueDate (required).</param>
         /// <param name="invoiceHash">invoiceHash (required).</param>
-        /// <param name="encryptedInvoice">encryptedInvoice (required).</param>
-        public KsefInvoiceEncrypted(int invoiceSize = default, byte[] invoiceHash = default, byte[] encryptedInvoice = default)
+        /// <param name="invoiceKsefNumber">invoiceKsefNumber.</param>
+        public KsefInvoiceLinksRequest(string nip = default, DateTime issueDate = default, byte[] invoiceHash = default, string invoiceKsefNumber = default)
         {
-            this.InvoiceSize = invoiceSize;
+            // to ensure "nip" is required (not null)
+            if (nip == null)
+            {
+                throw new ArgumentNullException("nip is a required property for KsefInvoiceLinksRequest and cannot be null");
+            }
+            this.Nip = nip;
+            this.IssueDate = issueDate;
             // to ensure "invoiceHash" is required (not null)
             if (invoiceHash == null)
             {
-                throw new ArgumentNullException("invoiceHash is a required property for KsefInvoiceEncrypted and cannot be null");
+                throw new ArgumentNullException("invoiceHash is a required property for KsefInvoiceLinksRequest and cannot be null");
             }
             this.InvoiceHash = invoiceHash;
-            // to ensure "encryptedInvoice" is required (not null)
-            if (encryptedInvoice == null)
-            {
-                throw new ArgumentNullException("encryptedInvoice is a required property for KsefInvoiceEncrypted and cannot be null");
-            }
-            this.EncryptedInvoice = encryptedInvoice;
+            this.InvoiceKsefNumber = invoiceKsefNumber;
         }
 
         /// <summary>
-        /// Gets or Sets InvoiceSize
+        /// Gets or Sets Nip
         /// </summary>
-        [DataMember(Name = "invoiceSize", IsRequired = true, EmitDefaultValue = true)]
-        public int InvoiceSize { get; set; }
+        [DataMember(Name = "nip", IsRequired = true, EmitDefaultValue = true)]
+        public string Nip { get; set; }
+
+        /// <summary>
+        /// Gets or Sets IssueDate
+        /// </summary>
+        [DataMember(Name = "issueDate", IsRequired = true, EmitDefaultValue = true)]
+        [JsonConverter(typeof(OpenAPIDateConverter))]
+        public DateTime IssueDate { get; set; }
 
         /// <summary>
         /// Gets or Sets InvoiceHash
@@ -72,10 +81,10 @@ namespace KsefApi.Model
         public byte[] InvoiceHash { get; set; }
 
         /// <summary>
-        /// Gets or Sets EncryptedInvoice
+        /// Gets or Sets InvoiceKsefNumber
         /// </summary>
-        [DataMember(Name = "encryptedInvoice", IsRequired = true, EmitDefaultValue = true)]
-        public byte[] EncryptedInvoice { get; set; }
+        [DataMember(Name = "invoiceKsefNumber", EmitDefaultValue = false)]
+        public string InvoiceKsefNumber { get; set; }
 
         /// <summary>
         /// Returns the string presentation of the object
@@ -84,10 +93,11 @@ namespace KsefApi.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class KsefInvoiceEncrypted {\n");
-            sb.Append("  InvoiceSize: ").Append(InvoiceSize).Append("\n");
+            sb.Append("class KsefInvoiceLinksRequest {\n");
+            sb.Append("  Nip: ").Append(Nip).Append("\n");
+            sb.Append("  IssueDate: ").Append(IssueDate).Append("\n");
             sb.Append("  InvoiceHash: ").Append(InvoiceHash).Append("\n");
-            sb.Append("  EncryptedInvoice: ").Append(EncryptedInvoice).Append("\n");
+            sb.Append("  InvoiceKsefNumber: ").Append(InvoiceKsefNumber).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }

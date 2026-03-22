@@ -26,35 +26,43 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// Contact data of the authorized entity
+    /// KsefInvoiceLinksResponse
     /// </summary>
-    [DataContract(Name = "DaneKontaktowePU")]
-    public partial class DaneKontaktowePU
+    [DataContract(Name = "KsefInvoiceLinksResponse")]
+    public partial class KsefInvoiceLinksResponse
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DaneKontaktowePU" /> class.
+        /// Initializes a new instance of the <see cref="KsefInvoiceLinksResponse" /> class.
         /// </summary>
-        /// <param name="emailPU">Email address.</param>
-        /// <param name="telefonPU">Phone number.</param>
-        public DaneKontaktowePU(string emailPU = default, string telefonPU = default)
+        [JsonConstructorAttribute]
+        protected KsefInvoiceLinksResponse() { }
+        /// <summary>
+        /// Initializes a new instance of the <see cref="KsefInvoiceLinksResponse" /> class.
+        /// </summary>
+        /// <param name="invoice">invoice (required).</param>
+        /// <param name="certificate">certificate.</param>
+        public KsefInvoiceLinksResponse(KsefQrCode invoice = default, KsefQrCode certificate = default)
         {
-            this.EmailPU = emailPU;
-            this.TelefonPU = telefonPU;
+            // to ensure "invoice" is required (not null)
+            if (invoice == null)
+            {
+                throw new ArgumentNullException("invoice is a required property for KsefInvoiceLinksResponse and cannot be null");
+            }
+            this.Invoice = invoice;
+            this.Certificate = certificate;
         }
 
         /// <summary>
-        /// Email address
+        /// Gets or Sets Invoice
         /// </summary>
-        /// <value>Email address</value>
-        [DataMember(Name = "EmailPU", EmitDefaultValue = false)]
-        public string EmailPU { get; set; }
+        [DataMember(Name = "invoice", IsRequired = true, EmitDefaultValue = true)]
+        public KsefQrCode Invoice { get; set; }
 
         /// <summary>
-        /// Phone number
+        /// Gets or Sets Certificate
         /// </summary>
-        /// <value>Phone number</value>
-        [DataMember(Name = "TelefonPU", EmitDefaultValue = false)]
-        public string TelefonPU { get; set; }
+        [DataMember(Name = "certificate", EmitDefaultValue = false)]
+        public KsefQrCode Certificate { get; set; }
 
         /// <summary>
         /// Returns the string presentation of the object
@@ -63,9 +71,9 @@ namespace KsefApi.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class DaneKontaktowePU {\n");
-            sb.Append("  EmailPU: ").Append(EmailPU).Append("\n");
-            sb.Append("  TelefonPU: ").Append(TelefonPU).Append("\n");
+            sb.Append("class KsefInvoiceLinksResponse {\n");
+            sb.Append("  Invoice: ").Append(Invoice).Append("\n");
+            sb.Append("  Certificate: ").Append(Certificate).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
