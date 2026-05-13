@@ -26,89 +26,88 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// BatchPartInfo
+    /// KsefContractor
     /// </summary>
-    [DataContract(Name = "BatchPartInfo")]
-    public partial class BatchPartInfo
+    [DataContract(Name = "KsefContractor")]
+    public partial class KsefContractor
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="BatchPartInfo" /> class.
+        /// Initializes a new instance of the <see cref="KsefContractor" /> class.
         /// </summary>
         [JsonConstructorAttribute]
-        public BatchPartInfo() { }
+        public KsefContractor() { }
 
         /// <summary>
-        /// Gets or Sets Ordinal
+        /// Gets or Sets Identifier
         /// </summary>
-        [DataMember(Name = "ordinal", IsRequired = true, EmitDefaultValue = true)]
-        public int Ordinal
+        [DataMember(Name = "identifier", IsRequired = true, EmitDefaultValue = true)]
+        public string Identifier
         {
-            get{ return _Ordinal;}
+            get{ return _Identifier;}
             set
             {
-                _Ordinal = value;
-                _flagOrdinal = true;
+                _Identifier = value;
+                _flagIdentifier = true;
             }
         }
-        private int _Ordinal;
-        private bool _flagOrdinal;
+        private string _Identifier;
+        private bool _flagIdentifier;
 
         /// <summary>
-        /// Returns false as Ordinal should not be serialized given that it's read-only.
+        /// Returns false as Identifier should not be serialized given that it's read-only.
         /// </summary>
         /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeOrdinal()
+        public bool ShouldSerializeIdentifier()
         {
-            return _flagOrdinal;
+            return _flagIdentifier;
         }
         /// <summary>
-        /// Gets or Sets PartSize
+        /// Gets or Sets Name
         /// </summary>
-        [DataMember(Name = "partSize", IsRequired = true, EmitDefaultValue = true)]
-        public long PartSize
+        [DataMember(Name = "name", IsRequired = true, EmitDefaultValue = true)]
+        public string Name
         {
-            get{ return _PartSize;}
+            get{ return _Name;}
             set
             {
-                _PartSize = value;
-                _flagPartSize = true;
+                _Name = value;
+                _flagName = true;
             }
         }
-        private long _PartSize;
-        private bool _flagPartSize;
+        private string _Name;
+        private bool _flagName;
 
         /// <summary>
-        /// Returns false as PartSize should not be serialized given that it's read-only.
+        /// Returns false as Name should not be serialized given that it's read-only.
         /// </summary>
         /// <returns>false (boolean)</returns>
-        public bool ShouldSerializePartSize()
+        public bool ShouldSerializeName()
         {
-            return _flagPartSize;
+            return _flagName;
         }
         /// <summary>
-        /// SHA-256 hash as Base64 string
+        /// Gets or Sets Address
         /// </summary>
-        /// <value>SHA-256 hash as Base64 string</value>
-        [DataMember(Name = "partHash", IsRequired = true, EmitDefaultValue = true)]
-        public byte[] PartHash
+        [DataMember(Name = "address", EmitDefaultValue = true)]
+        public string Address
         {
-            get{ return _PartHash;}
+            get{ return _Address;}
             set
             {
-                _PartHash = value;
-                _flagPartHash = true;
+                _Address = value;
+                _flagAddress = true;
             }
         }
-        private byte[] _PartHash;
-        private bool _flagPartHash;
+        private string _Address;
+        private bool _flagAddress;
 
         /// <summary>
-        /// Returns false as PartHash should not be serialized given that it's read-only.
+        /// Returns false as Address should not be serialized given that it's read-only.
         /// </summary>
         /// <returns>false (boolean)</returns>
-        public bool ShouldSerializePartHash()
+        public bool ShouldSerializeAddress()
         {
-            return _flagPartHash;
+            return _flagAddress;
         }
         /// <summary>
         /// Returns the string presentation of the object
@@ -117,10 +116,10 @@ namespace KsefApi.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class BatchPartInfo {\n");
-            sb.Append("  Ordinal: ").Append(Ordinal).Append("\n");
-            sb.Append("  PartSize: ").Append(PartSize).Append("\n");
-            sb.Append("  PartHash: ").Append(PartHash).Append("\n");
+            sb.Append("class KsefContractor {\n");
+            sb.Append("  Identifier: ").Append(Identifier).Append("\n");
+            sb.Append("  Name: ").Append(Name).Append("\n");
+            sb.Append("  Address: ").Append(Address).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }

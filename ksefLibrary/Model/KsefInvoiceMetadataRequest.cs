@@ -26,10 +26,10 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// KsefInvoiceQueryStartRequest
+    /// KsefInvoiceMetadataRequest
     /// </summary>
-    [DataContract(Name = "KsefInvoiceQueryStartRequest")]
-    public partial class KsefInvoiceQueryStartRequest
+    [DataContract(Name = "KsefInvoiceMetadataRequest")]
+    public partial class KsefInvoiceMetadataRequest
     {
         /// <summary>
         /// Defines SubjectType
@@ -89,35 +89,11 @@ namespace KsefApi.Model
             return _flagSubjectType;
         }
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefInvoiceQueryStartRequest" /> class.
+        /// Initializes a new instance of the <see cref="KsefInvoiceMetadataRequest" /> class.
         /// </summary>
         [JsonConstructorAttribute]
-        public KsefInvoiceQueryStartRequest() { }
+        public KsefInvoiceMetadataRequest() { }
 
-        /// <summary>
-        /// Gets or Sets EncryptionInfo
-        /// </summary>
-        [DataMember(Name = "encryptionInfo", IsRequired = true, EmitDefaultValue = true)]
-        public EncryptionInfo EncryptionInfo
-        {
-            get{ return _EncryptionInfo;}
-            set
-            {
-                _EncryptionInfo = value;
-                _flagEncryptionInfo = true;
-            }
-        }
-        private EncryptionInfo _EncryptionInfo;
-        private bool _flagEncryptionInfo;
-
-        /// <summary>
-        /// Returns false as EncryptionInfo should not be serialized given that it's read-only.
-        /// </summary>
-        /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeEncryptionInfo()
-        {
-            return _flagEncryptionInfo;
-        }
         /// <summary>
         /// Gets or Sets Range
         /// </summary>
@@ -143,16 +119,90 @@ namespace KsefApi.Model
             return _flagRange;
         }
         /// <summary>
+        /// Gets or Sets PageOffset
+        /// </summary>
+        [DataMember(Name = "pageOffset", IsRequired = true, EmitDefaultValue = true)]
+        public int PageOffset
+        {
+            get{ return _PageOffset;}
+            set
+            {
+                _PageOffset = value;
+                _flagPageOffset = true;
+            }
+        }
+        private int _PageOffset;
+        private bool _flagPageOffset;
+
+        /// <summary>
+        /// Returns false as PageOffset should not be serialized given that it's read-only.
+        /// </summary>
+        /// <returns>false (boolean)</returns>
+        public bool ShouldSerializePageOffset()
+        {
+            return _flagPageOffset;
+        }
+        /// <summary>
+        /// Gets or Sets PageSize
+        /// </summary>
+        [DataMember(Name = "pageSize", IsRequired = true, EmitDefaultValue = true)]
+        public int PageSize
+        {
+            get{ return _PageSize;}
+            set
+            {
+                _PageSize = value;
+                _flagPageSize = true;
+            }
+        }
+        private int _PageSize;
+        private bool _flagPageSize;
+
+        /// <summary>
+        /// Returns false as PageSize should not be serialized given that it's read-only.
+        /// </summary>
+        /// <returns>false (boolean)</returns>
+        public bool ShouldSerializePageSize()
+        {
+            return _flagPageSize;
+        }
+        /// <summary>
+        /// Gets or Sets SortAsc
+        /// </summary>
+        [DataMember(Name = "sortAsc", IsRequired = true, EmitDefaultValue = true)]
+        public bool SortAsc
+        {
+            get{ return _SortAsc;}
+            set
+            {
+                _SortAsc = value;
+                _flagSortAsc = true;
+            }
+        }
+        private bool _SortAsc;
+        private bool _flagSortAsc;
+
+        /// <summary>
+        /// Returns false as SortAsc should not be serialized given that it's read-only.
+        /// </summary>
+        /// <returns>false (boolean)</returns>
+        public bool ShouldSerializeSortAsc()
+        {
+            return _flagSortAsc;
+        }
+        /// <summary>
         /// Returns the string presentation of the object
         /// </summary>
         /// <returns>String presentation of the object</returns>
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class KsefInvoiceQueryStartRequest {\n");
-            sb.Append("  EncryptionInfo: ").Append(EncryptionInfo).Append("\n");
+            sb.Append("class KsefInvoiceMetadataRequest {\n");
             sb.Append("  SubjectType: ").Append(SubjectType).Append("\n");
             sb.Append("  Range: ").Append(Range).Append("\n");
+            sb.Append("  PageOffset: ").Append(PageOffset).Append("\n");
+            sb.Append("  PageSize: ").Append(PageSize).Append("\n");
+            sb.Append("  SortAsc: ").Append(SortAsc).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }

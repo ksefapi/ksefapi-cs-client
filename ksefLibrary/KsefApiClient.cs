@@ -38,7 +38,7 @@ namespace KsefApi
 	/// </summary>
 	public class KsefApiClient
 	{
-		public const string VERSION = "2.0.2";
+		public const string VERSION = "2.0.3";
 
 		public const string PRODUCTION_URL = "https://ksefapi.pl/api";
 		public const string TEST_URL = "https://ksefapi.pl/api-test";
@@ -709,7 +709,8 @@ namespace KsefApi
                 }
 
                 // req
-                KsefInvoiceGenerateRequest req = new KsefInvoiceGenerateRequest(invoice);
+                KsefInvoiceGenerateRequest req = new KsefInvoiceGenerateRequest();
+                req.Invoice = invoice;
 
                 string json = Serialize(req);
 
@@ -1329,7 +1330,7 @@ namespace KsefApi
                 }
                 else if (res is KsefSessionStatusResponse ssr)
                 {
-                    if (ssr.SessionInfo.Status.Code < 200 && ssr.SessionInfo.Status.Code != 170)
+                    if (ssr.SessionInfo.Status.Code < 200)
                     {
                         // still processing
                         Thread.Sleep(ms);
@@ -1373,7 +1374,10 @@ namespace KsefApi
         /// <param name="details">error details</param>
         private void Set(int code, string description, string details)
         {
-            LastError = new Error(code, description, details);
+            LastError = new Error();
+            LastError.Code = code;
+            LastError.Description = description;
+            LastError.Details = details;
         }
 
 

@@ -160,27 +160,37 @@ namespace KsefApi.Example
         /// </summary>
         private static Faktura CreateInvoice()
         {
-            Console.WriteLine("CreateInvoice");
-
             // create new invoice object (adapt the data to your needs)
             Faktura invoice = new Faktura();
 
             invoice.Naglowek = new TNaglowek();
-            invoice.Naglowek.KodFormularza = new TKodFormularza(TKodFormularza.KodFormularzaEnum.FA,
-                TKodFormularza.KodSystemowyEnum.FAV3, TKodFormularza.WersjaSchemyEnum._10E);
+            invoice.Naglowek.KodFormularza = new TKodFormularza();
+            invoice.Naglowek.KodFormularza.KodFormularza = TKodFormularza.KodFormularzaEnum.FA;
+            invoice.Naglowek.KodFormularza.KodSystemowy = TKodFormularza.KodSystemowyEnum.FAV3;
+            invoice.Naglowek.KodFormularza.WersjaSchemy = TKodFormularza.WersjaSchemyEnum._10E;
             invoice.Naglowek.WariantFormularza = WariantFormularza.NUMBER_3;
             invoice.Naglowek.DataWytworzeniaFa = Now;
             invoice.Naglowek.SystemInfo = "KSEF API";
 
             // seller data
             invoice.Podmiot1 = new Podmiot1();
-            invoice.Podmiot1.DaneIdentyfikacyjne = new TPodmiot1(SellerNIP, SellerName);
-            invoice.Podmiot1.Adres = new TAdres(TKodKraju.PL, "ul. Kwiatowa 1 m. 2", "00-001 Warszawa");
+            invoice.Podmiot1.DaneIdentyfikacyjne = new TPodmiot1();
+            invoice.Podmiot1.DaneIdentyfikacyjne.NIP = SellerNIP;
+            invoice.Podmiot1.DaneIdentyfikacyjne.Nazwa = SellerName;
+            invoice.Podmiot1.Adres = new TAdres();
+            invoice.Podmiot1.Adres.KodKraju = TKodKraju.PL;
+            invoice.Podmiot1.Adres.AdresL1 = "ul. Kwiatowa 1 m. 2";
+            invoice.Podmiot1.Adres.AdresL2 = "00-001 Warszawa";
 
             // buyer data
             invoice.Podmiot2 = new Podmiot2();
-            invoice.Podmiot2.DaneIdentyfikacyjne = new TPodmiot2("F.H.U. Jan Kowalski", "1111111111");
-            invoice.Podmiot2.Adres = new TAdres(TKodKraju.PL, "ul. Polna 1", "00-001 Warszawa");
+            invoice.Podmiot2.DaneIdentyfikacyjne = new TPodmiot2();
+            invoice.Podmiot2.DaneIdentyfikacyjne.NIP = "1111111111";
+            invoice.Podmiot2.DaneIdentyfikacyjne.Nazwa = "F.H.U. Jan Kowalski";
+            invoice.Podmiot2.Adres = new TAdres();
+            invoice.Podmiot2.Adres.KodKraju = TKodKraju.PL;
+            invoice.Podmiot2.Adres.AdresL1 = "ul. Polna 1";
+            invoice.Podmiot2.Adres.AdresL2 = "00-001 Warszawa";
             invoice.Podmiot2.JST = Podmiot2.JSTEnum.NUMBER_2;
             invoice.Podmiot2.GV = Podmiot2.GVEnum.NUMBER_2;
 
@@ -195,11 +205,30 @@ namespace KsefApi.Example
             invoice.Fa.P133 = 0.95;
             invoice.Fa.P143 = 0.05;
             invoice.Fa.P15 = 2051.0;                // total gross amount
-            invoice.Fa.Adnotacje = new Adnotacje(2, 2, 2, 2, new Zwolnienie(0, null, null, null, 1),
-                new NoweSrodkiTransportu(0, 0, null, 1), 2, new PMarzy(0, 0, 0, 0, 0, 1));
+
+            invoice.Fa.Adnotacje = new Adnotacje();
+            invoice.Fa.Adnotacje.P16 = 2;
+            invoice.Fa.Adnotacje.P17 = 2;
+            invoice.Fa.Adnotacje.P18 = 2;
+            invoice.Fa.Adnotacje.P18A = 2;
+            invoice.Fa.Adnotacje.P23 = 2;
+
+            invoice.Fa.Adnotacje.Zwolnienie = new Zwolnienie();
+            invoice.Fa.Adnotacje.Zwolnienie.P19N = 1;
+
+            invoice.Fa.Adnotacje.NoweSrodkiTransportu = new NoweSrodkiTransportu();
+            invoice.Fa.Adnotacje.NoweSrodkiTransportu.P22N = 1;
+
+            invoice.Fa.Adnotacje.PMarzy = new PMarzy();
+            invoice.Fa.Adnotacje.PMarzy.PPMarzyN = 1;
+
             invoice.Fa.RodzajFaktury = TRodzajFaktury.VAT;
             invoice.Fa.FP = 1;
-            invoice.Fa.Platnosc = new Platnosc(1, Now.Date, 0, null, null, TFormaPlatnosci.NUMBER_6);
+            
+            invoice.Fa.Platnosc = new Platnosc();
+            invoice.Fa.Platnosc.Zaplacono = 1;
+            invoice.Fa.Platnosc.DataZaplaty = Now.Date;
+            invoice.Fa.Platnosc.FormaPlatnosci = TFormaPlatnosci.NUMBER_6;
 
             FaWiersz w1 = new FaWiersz();
             w1.NrWierszaFa = 1;
@@ -246,8 +275,6 @@ namespace KsefApi.Example
         /// </summary>
         private static string GetInvoiceXml()
         {
-            Console.WriteLine("GetInvoiceXml");
-
             return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                 "<Faktura xmlns:etd=\"http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
                 "xmlns=\"http://crd.gov.pl/wzor/2025/06/25/13775/\">\n" +
@@ -488,8 +515,13 @@ namespace KsefApi.Example
                 Console.WriteLine("Invoice XML: " + xml);
 
                 // open new online session
-                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
-                KsefSessionOpenOnlineRequest soo = new KsefSessionOpenOnlineRequest(KsefInvoiceVersion.V3, ei);
+                EncryptionInfo ei = new EncryptionInfo();
+                ei.InitVector = Iv;
+                ei.EncryptedKey = EncKey;
+                
+                KsefSessionOpenOnlineRequest soo = new KsefSessionOpenOnlineRequest();
+                soo.InvoiceVersion = KsefInvoiceVersion.V3;
+                soo.EncryptionInfo = ei;
 
                 KsefSessionOpenOnlineResponse soor = KsefApi.KsefSessionOpenOnline(soo);
 
@@ -522,8 +554,14 @@ namespace KsefApi.Example
                 }
 
                 // send an encrypted invoice
-                KsefInvoiceEncrypted ie = new KsefInvoiceEncrypted(size, hash, encData);
-                KsefInvoiceSendRequest req = new KsefInvoiceSendRequest(soor.Id, ie);
+                KsefInvoiceEncrypted ie = new KsefInvoiceEncrypted();
+                ie.InvoiceSize = size;
+                ie.InvoiceHash = hash;
+                ie.EncryptedInvoice = encData;
+
+                KsefInvoiceSendRequest req = new KsefInvoiceSendRequest();
+                req.SessionId = soor.Id;
+                req.Encrypted = ie;
 
                 KsefInvoiceSendResponse isr = KsefApi.KsefInvoiceSend(req);
 
@@ -614,10 +652,25 @@ namespace KsefApi.Example
                 byte[] encDataHash = KsefApi.GetHash(encData);
 
                 // open new batch session
-                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
-                BatchPartInfo bpi = new BatchPartInfo(1, encData.Length, encDataHash);
-                BatchInfo bi = new BatchInfo(data.Length, dataHash, new List<BatchPartInfo> { bpi });
-                KsefSessionOpenBatchRequest sob = new KsefSessionOpenBatchRequest(KsefInvoiceVersion.V3, ei, true, bi);
+                EncryptionInfo ei = new EncryptionInfo();
+                ei.InitVector = Iv;
+                ei.EncryptedKey = EncKey;
+
+                BatchPartInfo bpi = new BatchPartInfo();
+                bpi.Ordinal = 1;
+                bpi.PartSize = encData.Length;
+                bpi.PartHash = encDataHash;
+
+                BatchInfo bi = new BatchInfo();
+                bi.BatchSize = data.Length;
+                bi.BatchHash = dataHash;
+                bi.BatchParts = new List<BatchPartInfo> { bpi };
+
+                KsefSessionOpenBatchRequest sob = new KsefSessionOpenBatchRequest();
+                sob.InvoiceVersion = KsefInvoiceVersion.V3;
+                sob.EncryptionInfo = ei;
+                sob.Offline = true;
+                sob.BatchInfo = bi;
 
                 KsefSessionOpenBatchResponse sobr = KsefApi.KsefSessionOpenBatch(sob);
 
@@ -760,13 +813,21 @@ namespace KsefApi.Example
             try
             {
                 // start query (get all invoices from last 3 days)
-                EncryptionInfo ei = new EncryptionInfo(Iv, EncKey);
+                EncryptionInfo ei = new EncryptionInfo();
+                ei.InitVector = Iv;
+                ei.EncryptedKey = EncKey;
 
                 DateTime from = Now.AddDays(-3);
                 DateTime to = Now;
 
-                KsefInvoiceQueryStartRange qr = new KsefInvoiceQueryStartRange(from, to);
-                KsefInvoiceQueryStartRequest iqs = new KsefInvoiceQueryStartRequest(ei, KsefInvoiceQueryStartRequest.SubjectTypeEnum.Subject1, qr);
+                KsefInvoiceQueryStartRange qr = new KsefInvoiceQueryStartRange();
+                qr.From = from;
+                qr.To = to;
+
+                KsefInvoiceQueryStartRequest iqs = new KsefInvoiceQueryStartRequest();
+                iqs.EncryptionInfo = ei;
+                iqs.SubjectType = KsefInvoiceQueryStartRequest.SubjectTypeEnum.Subject1;
+                iqs.Range = qr;
 
                 string queryId = KsefApi.KsefInvoiceQueryStart(iqs);
 
@@ -829,7 +890,11 @@ namespace KsefApi.Example
                 byte[] hash = KsefApi.GetHash(data);
 
                 // get URLs and QR codes for visualization
-                KsefInvoiceLinksRequest il = new KsefInvoiceLinksRequest(SellerNIP, Now, hash, KsefNumber);
+                KsefInvoiceLinksRequest il = new KsefInvoiceLinksRequest();
+                il.Nip = SellerNIP;
+                il.IssueDate = Now;
+                il.InvoiceHash = hash;
+                il.InvoiceKsefNumber = KsefNumber;
 
                 KsefInvoiceLinksResponse ilr = KsefApi.ksefInvoiceLinks(il);
 
@@ -869,8 +934,12 @@ namespace KsefApi.Example
                 byte[] data = Encoding.UTF8.GetBytes(xml);
 
                 // visualize invoice xml as html (official layout from MF)
-                KsefInvoiceVisualizeRequest iv = new KsefInvoiceVisualizeRequest(null, string.IsNullOrEmpty(KsefNumber), KsefNumber,
-                    data, KsefInvoiceVisualizeRequest.OutputFormatEnum.Html,KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+                KsefInvoiceVisualizeRequest iv = new KsefInvoiceVisualizeRequest();
+                iv.Offline = string.IsNullOrEmpty(KsefNumber);
+                iv.InvoiceKsefNumber = KsefNumber;
+                iv.InvoiceData = data;
+                iv.OutputFormat = KsefInvoiceVisualizeRequest.OutputFormatEnum.Html;
+                iv.OutputLanguage = KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl;
 
                 byte[] html = KsefApi.KsefInvoiceVisualize(iv);
 
@@ -886,8 +955,12 @@ namespace KsefApi.Example
                 Console.WriteLine("HTML saved to: " + path);
 
                 // visualize invoice xml as pdf (still needs improvements)
-                iv = new KsefInvoiceVisualizeRequest(null, string.IsNullOrEmpty(KsefNumber), KsefNumber,
-                    data, KsefInvoiceVisualizeRequest.OutputFormatEnum.Pdf, KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl);
+                iv = new KsefInvoiceVisualizeRequest();
+                iv.Offline = string.IsNullOrEmpty(KsefNumber);
+                iv.InvoiceKsefNumber = KsefNumber;
+                iv.InvoiceData = data;
+                iv.OutputFormat = KsefInvoiceVisualizeRequest.OutputFormatEnum.Pdf;
+                iv.OutputLanguage = KsefInvoiceVisualizeRequest.OutputLanguageEnum.Pl;
 
                 byte[] pdf = KsefApi.KsefInvoiceVisualize(iv);
 
@@ -926,7 +999,12 @@ namespace KsefApi.Example
                 // (e.g., an order number)
                 string uploadId = Guid.NewGuid().ToString();
 
-                BoxUploadInvoiceRequest req = new BoxUploadInvoiceRequest(uploadId, false, false, true, Encoding.UTF8.GetBytes(xml));
+                BoxUploadInvoiceRequest req = new BoxUploadInvoiceRequest();
+                req.UploadId = uploadId;
+                req.Offline = false;
+                req.Notify = false;
+                req.Upo = true;
+                req.InvoiceData = Encoding.UTF8.GetBytes(xml);
 
                 if (!KsefApi.BoxUploadInvoice(req))
                 {
@@ -979,7 +1057,12 @@ namespace KsefApi.Example
                 // (e.g., an order number)
                 string uploadId = Guid.NewGuid().ToString();
 
-                BoxUploadBatchRequest req = new BoxUploadBatchRequest(uploadId, true, false, true, KsefInvoiceVersion.V3);
+                BoxUploadBatchRequest req = new BoxUploadBatchRequest();
+                req.UploadId = uploadId;
+                req.Offline = false;
+                req.Notify = false;
+                req.Upo = true;
+                req.InvoiceVersion = KsefInvoiceVersion.V3;
 
                 if (!KsefApi.BoxUploadBatch(req, batch))
                 {
@@ -1035,10 +1118,15 @@ namespace KsefApi.Example
                 DateTime from = Now.AddDays(-3);
                 DateTime to = Now;
 
-                KsefInvoiceQueryStartRange range = new KsefInvoiceQueryStartRange(from, to);
+                KsefInvoiceQueryStartRange range = new KsefInvoiceQueryStartRange();
+                range.From = from;
+                range.To = to;
 
-                BoxDownloadInvoicesRequest req = new BoxDownloadInvoicesRequest(downloadId, false,
-                    BoxDownloadInvoicesRequest.SubjectTypeEnum.Subject1, range);
+                BoxDownloadInvoicesRequest req = new BoxDownloadInvoicesRequest();
+                req.DownloadId = downloadId;
+                req.Notify = false;
+                req.SubjectType = BoxDownloadInvoicesRequest.SubjectTypeEnum.Subject1;
+                req.Range = range;
 
                 if (!KsefApi.BoxDownloadInvoices(req))
                 {
