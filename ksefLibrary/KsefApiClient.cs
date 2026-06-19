@@ -38,7 +38,7 @@ namespace KsefApi
 	/// </summary>
 	public class KsefApiClient
 	{
-		public const string VERSION = "2.0.3";
+		public const string VERSION = "2.0.4";
 
 		public const string PRODUCTION_URL = "https://ksefapi.pl/api";
 		public const string TEST_URL = "https://ksefapi.pl/api-test";
@@ -868,6 +868,36 @@ namespace KsefApi
         }
 
         /// <summary>
+        /// Get invoice metadata
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <returns>invoice metadata or null</returns>
+        public KsefInvoiceMetadataResponse KsefInvoiceMetadata(KsefInvoiceMetadataRequest req)
+        {
+            try
+            {
+                Clear();
+
+                if (req == null)
+                {
+                    Set(ClientError.CLI_INPUT);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/invoice/metadata");
+
+                return (KsefInvoiceMetadataResponse)PostObject(url, req, null, typeof(KsefInvoiceMetadataResponse));
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Start new invoice query
         /// </summary>
         /// <param name="req">request object</param>
@@ -1022,6 +1052,39 @@ namespace KsefApi
                 string url = (URL + "/invoice/visualize");
 
                 return Send(url, "application/json", new Body(json), "application/pdf, text/html, application/json");
+            }
+            catch (Exception e)
+            {
+                Set(ClientError.CLI_EXCEPTION, e.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Generate visualization of a UPO
+        /// </summary>
+        /// <param name="req">request object</param>
+        /// <returns>UPO visualization in requested format or null</returns>
+        public byte[] KsefUpoVisualize(KsefUpoVisualizeRequest req)
+        {
+            try
+            {
+                Clear();
+
+                // req
+                string json = Serialize(req);
+
+                if (json == null)
+                {
+                    Set(ClientError.CLI_JSON);
+                    return null;
+                }
+
+                // prepare url
+                string url = (URL + "/invoice/upo/visualize");
+
+                return Send(url, "application/json", new Body(json), "application/pdf, application/json");
             }
             catch (Exception e)
             {

@@ -616,11 +616,7 @@ namespace KsefApi.Example
                 }
 
                 Console.WriteLine("UPO: " + upo);
-
-                string path = CreateTempFile("upo-", ".xml");
-                File.WriteAllText(path, upo, Encoding.UTF8);
-
-                Console.WriteLine("UPO saved to: " + path);
+                saveUpo(Encoding.UTF8.GetBytes(upo));
 
                 Console.WriteLine("CreateAndSendInvoice: done");
             }
@@ -756,11 +752,7 @@ namespace KsefApi.Example
                 }
 
                 Console.WriteLine("UPO: " + upo);
-
-                string path = CreateTempFile("upo-", ".xml");
-                File.WriteAllText(path, upo, Encoding.UTF8);
-
-                Console.WriteLine("UPO saved to: " + path);
+                saveUpo(Encoding.UTF8.GetBytes(upo));
 
                 Console.WriteLine("CreateAndSendBatch: done");
             }
@@ -1027,10 +1019,7 @@ namespace KsefApi.Example
 
                 if (res.Upo != null)
                 {
-                    string path = CreateTempFile("upo-", ".xml");
-                    File.WriteAllBytes(path, res.Upo);
-
-                    Console.WriteLine("UPO saved to: " + path);
+                    saveUpo(res.Upo);
                 }
 
                 Console.WriteLine("UploadInvoice: done");
@@ -1089,10 +1078,7 @@ namespace KsefApi.Example
 
                 if (res.Upo != null)
                 {
-                    string path = CreateTempFile("upo-", ".xml");
-                    File.WriteAllBytes(path, res.Upo);
-
-                    Console.WriteLine("UPO saved to: " + path);
+                    saveUpo(res.Upo);
                 }
                 
                 Console.WriteLine("UploadBatch: done");
@@ -1175,6 +1161,36 @@ namespace KsefApi.Example
                 Console.WriteLine("Invoice KSeF number: " + info.KsefNumber);
                 Console.WriteLine("Invoice acquisition date: " + info.AcquisitionDate);
             }
+        }
+
+        /// <summary>
+        /// Saves UPO to file
+        /// </summary>
+        private static void saveUpo(byte[] xml)
+        {
+            string path = CreateTempFile("upo-", ".xml");
+            File.WriteAllBytes(path, xml);
+
+            Console.WriteLine("UPO saved to:               " + path);
+
+            // get visualization
+            KsefUpoVisualizeRequest req = new KsefUpoVisualizeRequest();
+            req.UpoData = xml;
+            req.OutputFormat = KsefUpoVisualizeRequest.OutputFormatEnum.Pdf;
+            req.OutputLanguage = KsefUpoVisualizeRequest.OutputLanguageEnum.Pl;
+
+            byte[] pdf = KsefApi.KsefUpoVisualize(req);
+
+            if (pdf == null)
+            {
+                Console.Error.WriteLine("ERR: KsefUpoVisualize failed: " + KsefApi.LastError);
+                return;
+            }
+
+            path = CreateTempFile("upo-", ".pdf");
+            File.WriteAllBytes(path, pdf);
+
+            Console.WriteLine("UPO visualization saved to: " + path);
         }
 
         private static string ToIsoString(DateTime dt)

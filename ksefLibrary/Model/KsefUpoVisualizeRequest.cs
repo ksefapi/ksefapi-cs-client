@@ -26,10 +26,10 @@ using OpenAPIDateConverter = KsefApi.Client.OpenAPIDateConverter;
 namespace KsefApi.Model
 {
     /// <summary>
-    /// KsefInvoiceVisualizeRequest
+    /// KsefUpoVisualizeRequest
     /// </summary>
-    [DataContract(Name = "KsefInvoiceVisualizeRequest")]
-    public partial class KsefInvoiceVisualizeRequest
+    [DataContract(Name = "KsefUpoVisualizeRequest")]
+    public partial class KsefUpoVisualizeRequest
     {
         /// <summary>
         /// Defines OutputFormat
@@ -38,16 +38,10 @@ namespace KsefApi.Model
         public enum OutputFormatEnum
         {
             /// <summary>
-            /// Enum Html for value: html
-            /// </summary>
-            [EnumMember(Value = "html")]
-            Html = 1,
-
-            /// <summary>
             /// Enum Pdf for value: pdf
             /// </summary>
             [EnumMember(Value = "pdf")]
-            Pdf = 2
+            Pdf = 1
         }
 
 
@@ -122,107 +116,35 @@ namespace KsefApi.Model
             return _flagOutputLanguage;
         }
         /// <summary>
-        /// Initializes a new instance of the <see cref="KsefInvoiceVisualizeRequest" /> class.
+        /// Initializes a new instance of the <see cref="KsefUpoVisualizeRequest" /> class.
         /// </summary>
         [JsonConstructorAttribute]
-        public KsefInvoiceVisualizeRequest() { }
+        public KsefUpoVisualizeRequest() { }
 
         /// <summary>
-        /// Gets or Sets TemplateName
+        /// UPO XML as Base64 string
         /// </summary>
-        [DataMember(Name = "templateName", EmitDefaultValue = true)]
-        public string TemplateName
+        /// <value>UPO XML as Base64 string</value>
+        [DataMember(Name = "upoData", IsRequired = true, EmitDefaultValue = true)]
+        public byte[] UpoData
         {
-            get{ return _TemplateName;}
+            get{ return _UpoData;}
             set
             {
-                _TemplateName = value;
-                _flagTemplateName = true;
+                _UpoData = value;
+                _flagUpoData = true;
             }
         }
-        private string _TemplateName;
-        private bool _flagTemplateName;
+        private byte[] _UpoData;
+        private bool _flagUpoData;
 
         /// <summary>
-        /// Returns false as TemplateName should not be serialized given that it's read-only.
+        /// Returns false as UpoData should not be serialized given that it's read-only.
         /// </summary>
         /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeTemplateName()
+        public bool ShouldSerializeUpoData()
         {
-            return _flagTemplateName;
-        }
-        /// <summary>
-        /// Gets or Sets Offline
-        /// </summary>
-        [DataMember(Name = "offline", IsRequired = true, EmitDefaultValue = true)]
-        public bool Offline
-        {
-            get{ return _Offline;}
-            set
-            {
-                _Offline = value;
-                _flagOffline = true;
-            }
-        }
-        private bool _Offline;
-        private bool _flagOffline;
-
-        /// <summary>
-        /// Returns false as Offline should not be serialized given that it's read-only.
-        /// </summary>
-        /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeOffline()
-        {
-            return _flagOffline;
-        }
-        /// <summary>
-        /// Gets or Sets InvoiceKsefNumber
-        /// </summary>
-        [DataMember(Name = "invoiceKsefNumber", EmitDefaultValue = true)]
-        public string InvoiceKsefNumber
-        {
-            get{ return _InvoiceKsefNumber;}
-            set
-            {
-                _InvoiceKsefNumber = value;
-                _flagInvoiceKsefNumber = true;
-            }
-        }
-        private string _InvoiceKsefNumber;
-        private bool _flagInvoiceKsefNumber;
-
-        /// <summary>
-        /// Returns false as InvoiceKsefNumber should not be serialized given that it's read-only.
-        /// </summary>
-        /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeInvoiceKsefNumber()
-        {
-            return _flagInvoiceKsefNumber;
-        }
-        /// <summary>
-        /// Invoice XML as Base64 string
-        /// </summary>
-        /// <value>Invoice XML as Base64 string</value>
-        [DataMember(Name = "invoiceData", IsRequired = true, EmitDefaultValue = true)]
-        public byte[] InvoiceData
-        {
-            get{ return _InvoiceData;}
-            set
-            {
-                _InvoiceData = value;
-                _flagInvoiceData = true;
-            }
-        }
-        private byte[] _InvoiceData;
-        private bool _flagInvoiceData;
-
-        /// <summary>
-        /// Returns false as InvoiceData should not be serialized given that it's read-only.
-        /// </summary>
-        /// <returns>false (boolean)</returns>
-        public bool ShouldSerializeInvoiceData()
-        {
-            return _flagInvoiceData;
+            return _flagUpoData;
         }
         /// <summary>
         /// Returns the string presentation of the object
@@ -231,11 +153,8 @@ namespace KsefApi.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class KsefInvoiceVisualizeRequest {\n");
-            sb.Append("  TemplateName: ").Append(TemplateName).Append("\n");
-            sb.Append("  Offline: ").Append(Offline).Append("\n");
-            sb.Append("  InvoiceKsefNumber: ").Append(InvoiceKsefNumber).Append("\n");
-            sb.Append("  InvoiceData: ").Append(InvoiceData).Append("\n");
+            sb.Append("class KsefUpoVisualizeRequest {\n");
+            sb.Append("  UpoData: ").Append(UpoData).Append("\n");
             sb.Append("  OutputFormat: ").Append(OutputFormat).Append("\n");
             sb.Append("  OutputLanguage: ").Append(OutputLanguage).Append("\n");
             sb.Append("}\n");
